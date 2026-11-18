@@ -1,0 +1,119 @@
+# The operator's cluster-wide rights: read prometheus-operator's objects and namespaces, own
+# AlertRule objects, write AlertScope status and Events. No verb on anything else, and no write
+# verb at all on monitoring.coreos.com (test/chart checks both). The rules match the generated
+# config/rbac/role.yaml.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "alert-operator.fullname" . }}
+  labels:
+    {{- include "alert-operator.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: [namespaces]
+    verbs: [get, list, watch]
+  - apiGroups: [alerts.hypersurgery.dev]
+    resources: [alertrules]
+    verbs: [create, delete, get, list, patch, update, watch]
+  - apiGroups: [alerts.hypersurgery.dev]
+    resources: [alertrules/status, alertscopes/status]
+    verbs: [get, patch, update]
+  - apiGroups: [alerts.hypersurgery.dev]
+    resources: [alertscopes]
+    verbs: [get, list, watch]
+  - apiGroups: [events.k8s.io]
+    resources: [events]
+    verbs: [create, patch]
+  - apiGroups: [monitoring.coreos.com]
+    resources: [prometheuses, prometheusrules]
+    verbs: [get, list, watch]
+{{- if .Values.metrics.secure }}
+  # The metrics endpoint authenticates and authorizes its scrapers.
+  - apiGroups: [authentication.k8s.io]
+    resources: [tokenreviews]
+    verbs: [create]
+  - apiGroups: [authorization.k8s.io]
+    resources: [subjectaccessreviews]
+    verbs: [create]
+{{- end }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "alert-operator.fullname" . }}
+  labels:
+    {{- include "alert-operator.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "alert-operator.fullname" . }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "alert-operator.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+---
+# In its own namespace only: the auth Secrets of AlertScope endpoints, and the leader election
+# lease.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "alert-operator.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "alert-operator.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: [secrets]
+    verbs: [get]
+  - apiGroups: [coordination.k8s.io]
+    resources: [leases]
+    verbs: [get, list, watch, create, update, patch, delete]
+  - apiGroups: [""]
+    resources: [events]
+    verbs: [create, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "alert-operator.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "alert-operator.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "alert-operator.fullname" . }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "alert-operator.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+{{- if .Values.rbac.aggregateToView }}
+---
+# Teams read their rules' verdicts with the namespace rights they already have.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "alert-operator.fullname" . }}-view
+  labels:
+    {{- include "alert-operator.labels" . | nindent 4 }}
+    rbac.authorization.k8s.io/aggregate-to-view: "true"
+    rbac.authorization.k8s.io/aggregate-to-edit: "true"
+    rbac.authorization.k8s.io/aggregate-to-admin: "true"
+rules:
+  - apiGroups: [alerts.hypersurgery.dev]
+    resources: [alertrules, alertscopes]
+    verbs: [get, list, watch]
+{{- end }}
+{{- if .Values.metrics.secure }}
+---
+# Bind this to the service account of the Prometheus that scrapes the operator.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "alert-operator.fullname" . }}-metrics-reader
+  labels:
+    {{- include "alert-operator.labels" . | nindent 4 }}
+rules:
+  - nonResourceURLs: [/metrics]
+    verbs: [get]
+{{- end }}

@@ -1,0 +1,784 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Alert Operator — v0.1.0</title>
+<meta name="description" content="A Kubernetes operator that keeps a live inventory of Prometheus alert rules with an owner and a quality verdict for each one — never loaded, can never fire, noisy, flapping, always silenced, unowned.">
+<!-- Not released yet: keep out of search engines until the coordinator publishes the page. Remove on launch. -->
+<meta name="robots" content="noindex, nofollow">
+<link rel="canonical" href="https://hypersurgery.dev/alert-operator/">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://hypersurgery.dev/alert-operator/">
+<meta property="og:title" content="Alert Operator — v0.1.0">
+<meta property="og:description" content="A Kubernetes operator that keeps a live inventory of Prometheus alert rules with an owner and a quality verdict for each one — never loaded, can never fire, noisy, flapping, always silenced, unowned.">
+<meta name="twitter:card" content="summary">
+<link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #070b16;
+  --bg-2: #0b1121;
+  --surface: #0f162a;
+  --surface-2: #131c34;
+  --border: rgba(148, 163, 255, 0.12);
+  --border-strong: rgba(148, 163, 255, 0.22);
+  --text: #e7eaf3;
+  --muted: #8e97ad;
+  --faint: #5d6680;
+  --teal: #2dd4bf;
+  --violet: #8b5cf6;
+  --blue: #60a5fa;
+  --amber: #fbbf24;
+  --red: #f87171;
+  --green: #4ade80;
+  --radius: 16px;
+  --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --max: 1160px;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 16px/1.6 var(--sans);
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+a { color: inherit; text-decoration: none; }
+code, pre { font-family: var(--mono); }
+.wrap { max-width: var(--max); margin: 0 auto; padding: 0 24px; }
+
+/* Background decoration */
+.glow {
+  position: absolute; inset: 0 0 auto 0; height: 900px; pointer-events: none; z-index: 0;
+  background:
+    radial-gradient(600px 380px at 15% 10%, rgba(45, 212, 191, 0.16), transparent 70%),
+    radial-gradient(700px 420px at 85% 0%, rgba(139, 92, 246, 0.20), transparent 70%),
+    radial-gradient(500px 300px at 60% 60%, rgba(96, 165, 250, 0.08), transparent 70%);
+}
+.grid-bg {
+  position: absolute; inset: 0 0 auto 0; height: 900px; pointer-events: none; z-index: 0;
+  background-image:
+    linear-gradient(rgba(148, 163, 255, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 255, 0.06) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(ellipse at 50% 0%, #000 30%, transparent 75%);
+  -webkit-mask-image: radial-gradient(ellipse at 50% 0%, #000 30%, transparent 75%);
+}
+
+/* Nav */
+nav {
+  position: sticky; top: 0; z-index: 50;
+  backdrop-filter: saturate(160%) blur(14px);
+  -webkit-backdrop-filter: saturate(160%) blur(14px);
+  background: rgba(7, 11, 22, 0.72);
+  border-bottom: 1px solid var(--border);
+}
+nav .wrap { display: flex; align-items: center; gap: 18px; height: 64px; }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 700; letter-spacing: -0.01em; white-space: nowrap; }
+.brand svg { width: 28px; height: 28px; }
+.nav-links { display: flex; gap: 16px; margin-left: auto; flex: none; font-size: 14px; color: var(--muted); white-space: nowrap; }
+.nav-links a:hover { color: var(--text); }
+.nav-gh { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px;
+  border-radius: 9px; border: 1px solid var(--border); color: var(--muted); }
+.nav-gh:hover { color: var(--text); border-color: var(--border-strong); background: rgba(255,255,255,0.03); }
+.pill {
+  /* In a crowded nav a shrinking flex item wraps its text and the rounded corners turn it
+     into a blob, so it keeps its width and its line. */
+  display: inline-flex; align-items: center; gap: 6px; flex: none; white-space: nowrap;
+  font-size: 12px; font-weight: 600; letter-spacing: 0.02em;
+  padding: 4px 10px; border-radius: 999px;
+  border: 1px solid var(--border-strong); color: var(--muted); background: rgba(255,255,255,0.02);
+}
+.pill .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--amber); box-shadow: 0 0 10px var(--amber); }
+
+/* Hero */
+header.hero { position: relative; padding: 96px 0 72px; }
+.hero .wrap { position: relative; z-index: 1; display: grid; grid-template-columns: 0.95fr 1.05fr; gap: 56px; align-items: center; }
+.eyebrow { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--teal); font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
+h1 {
+  font-size: clamp(38px, 5.2vw, 60px); line-height: 1.05; letter-spacing: -0.035em; margin: 16px 0 20px; font-weight: 800;
+}
+.grad {
+  background: linear-gradient(100deg, var(--teal) 0%, var(--blue) 45%, var(--violet) 100%);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.lead { font-size: 19px; color: var(--muted); max-width: 560px; margin: 0 0 32px; }
+.lead strong { color: var(--text); font-weight: 600; }
+.cta { display: flex; gap: 12px; flex-wrap: wrap; }
+.btn {
+  display: inline-flex; align-items: center; gap: 8px; height: 46px; padding: 0 20px; border-radius: 12px;
+  font-weight: 600; font-size: 15px; transition: transform .15s ease, box-shadow .15s ease, background .15s ease;
+}
+.btn-primary { background: linear-gradient(100deg, var(--teal), var(--blue)); color: #04111a; box-shadow: 0 8px 30px -8px rgba(45, 212, 191, 0.55); }
+.btn-primary:hover { transform: translateY(-1px); box-shadow: 0 12px 34px -8px rgba(45, 212, 191, 0.7); }
+.btn-ghost { border: 1px solid var(--border-strong); color: var(--text); background: rgba(255,255,255,0.03); }
+.btn-ghost:hover { background: rgba(255,255,255,0.06); }
+.hero-meta { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 28px; font-size: 13px; color: var(--faint); }
+.hero-meta span { display: inline-flex; align-items: center; gap: 6px; }
+.hero-meta svg { width: 14px; height: 14px; color: var(--teal); }
+
+/* Terminal */
+.terminal {
+  background: linear-gradient(180deg, rgba(19, 28, 52, 0.92), rgba(11, 17, 33, 0.95));
+  border: 1px solid var(--border-strong); border-radius: 18px; overflow: hidden;
+  box-shadow: 0 40px 80px -30px rgba(0,0,0,0.8), 0 0 0 1px rgba(255,255,255,0.02) inset;
+}
+.term-bar { display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+.term-bar i { width: 11px; height: 11px; border-radius: 50%; display: inline-block; }
+.term-bar i:nth-child(1) { background: #ff5f57; } .term-bar i:nth-child(2) { background: #febc2e; } .term-bar i:nth-child(3) { background: #28c840; }
+.term-bar span { margin-left: 10px; font: 12px var(--mono); color: var(--faint); }
+.term-body { padding: 18px 18px 20px; font: 12px/1.75 var(--mono); color: #c9d1e6; overflow-x: auto; white-space: pre; }
+.t-prompt { color: var(--teal); } .t-cmd { color: var(--text); } .t-head { color: var(--faint); }
+.t-ok { color: var(--green); } .t-warn { color: var(--amber); } .t-bad { color: var(--red); } .t-dim { color: var(--faint); } .t-vio { color: #b69cff; }
+
+/* Sections */
+section { position: relative; padding: 96px 0; }
+section.alt { background: linear-gradient(180deg, transparent, rgba(15, 22, 42, 0.55) 12%, rgba(15, 22, 42, 0.55) 88%, transparent); }
+.section-head { max-width: 720px; margin-bottom: 48px; }
+.section-head .kicker { font-size: 13px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--violet); }
+h2 { font-size: clamp(28px, 3.6vw, 42px); line-height: 1.12; letter-spacing: -0.028em; margin: 10px 0 14px; font-weight: 800; }
+.section-head p { color: var(--muted); font-size: 17px; margin: 0; }
+.section-note { margin: 22px 0 0; color: var(--muted); font-size: 15.5px; max-width: 720px; }
+.checks li em { font-style: normal; color: var(--text); }
+
+/* Stats */
+.stats { display: grid; grid-template-columns: repeat(4, 1fr); border: 1px solid var(--border); border-radius: var(--radius); background: rgba(15, 22, 42, 0.6); overflow: hidden; }
+.stat { padding: 26px 24px; border-right: 1px solid var(--border); }
+.stat:last-child { border-right: 0; }
+.stat b { display: block; font-size: 26px; letter-spacing: -0.02em; margin-bottom: 4px; }
+.stat span { color: var(--muted); font-size: 14px; }
+
+/* Cards */
+.cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+.card {
+  position: relative; padding: 26px; border-radius: var(--radius);
+  background: linear-gradient(180deg, rgba(19, 28, 52, 0.7), rgba(15, 22, 42, 0.5));
+  border: 1px solid var(--border); transition: border-color .2s ease, transform .2s ease;
+}
+.card:hover { border-color: var(--border-strong); transform: translateY(-2px); }
+.card h3 { font-size: 18px; margin: 14px 0 8px; letter-spacing: -0.01em; }
+.card p { color: var(--muted); margin: 0; font-size: 15px; }
+.icon {
+  width: 40px; height: 40px; border-radius: 11px; display: grid; place-items: center;
+  background: rgba(45, 212, 191, 0.1); color: var(--teal); border: 1px solid rgba(45, 212, 191, 0.25);
+}
+.icon.v { background: rgba(139, 92, 246, 0.12); color: #b69cff; border-color: rgba(139, 92, 246, 0.3); }
+.icon.b { background: rgba(96, 165, 250, 0.12); color: var(--blue); border-color: rgba(96, 165, 250, 0.3); }
+.icon.a { background: rgba(251, 191, 36, 0.1); color: var(--amber); border-color: rgba(251, 191, 36, 0.3); }
+.icon.r { background: rgba(248, 113, 113, 0.1); color: var(--red); border-color: rgba(248, 113, 113, 0.3); }
+.icon svg { width: 20px; height: 20px; }
+
+/* Two layers */
+.layers { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+.layer { padding: 32px; border-radius: 20px; position: relative; }
+.layer.core { background: linear-gradient(160deg, rgba(45, 212, 191, 0.10), rgba(15, 22, 42, 0.7) 55%); border: 1px solid rgba(45, 212, 191, 0.35); }
+.layer.opt { background: linear-gradient(160deg, rgba(139, 92, 246, 0.10), rgba(15, 22, 42, 0.7) 55%); border: 1px dashed rgba(139, 92, 246, 0.55); }
+.layer .tag { font: 600 12px var(--mono); letter-spacing: 0.04em; padding: 4px 10px; border-radius: 8px; display: inline-block; }
+.layer.core .tag { color: var(--teal); background: rgba(45, 212, 191, 0.12); }
+.layer.opt .tag { color: #b69cff; background: rgba(139, 92, 246, 0.14); }
+.layer h3 { font-size: 24px; margin: 16px 0 6px; letter-spacing: -0.02em; }
+.layer > p { color: var(--muted); margin: 0 0 20px; }
+.checks { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
+.checks li { display: grid; grid-template-columns: 22px 1fr; gap: 10px; font-size: 15px; color: #cdd3e3; }
+.checks svg { width: 18px; height: 18px; margin-top: 3px; }
+.layer.core .checks svg { color: var(--teal); }
+.layer.opt .checks svg { color: #b69cff; }
+.layer .note { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--border); font-size: 13.5px; color: var(--faint); }
+
+/* Diagram */
+.diagram { border: 1px solid var(--border); border-radius: 20px; background: rgba(11, 17, 33, 0.7); padding: 28px; overflow-x: auto; }
+.diagram svg { display: block; width: 100%; min-width: 860px; height: auto; }
+.steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; margin-top: 26px; }
+.step { padding: 20px; border-radius: 14px; border: 1px solid var(--border); background: rgba(15, 22, 42, 0.5); }
+.step .n { font: 600 12px var(--mono); color: var(--teal); }
+.step h4 { margin: 6px 0 6px; font-size: 16px; }
+.step p { margin: 0; color: var(--muted); font-size: 14px; }
+
+/* Features */
+.features { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+.feature { padding: 22px; border-radius: 14px; border: 1px solid var(--border); background: rgba(15, 22, 42, 0.45); }
+.feature h4 { margin: 12px 0 6px; font-size: 15.5px; letter-spacing: -0.01em; }
+.feature p { margin: 0; color: var(--muted); font-size: 14px; }
+
+/* Code */
+.code-grid { display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 20px; }
+.code { border: 1px solid var(--border-strong); border-radius: 16px; overflow: hidden; background: #0a1020; }
+.code-head { display: flex; justify-content: space-between; align-items: center; padding: 10px 16px; border-bottom: 1px solid var(--border); font: 12px var(--mono); color: var(--faint); }
+.code-head b { color: var(--muted); font-weight: 500; }
+.code pre { margin: 0; padding: 18px; font-size: 12.5px; line-height: 1.7; color: #c9d1e6; overflow-x: auto; }
+.k { color: #7dd3fc; } .s { color: #a7f3d0; } .c { color: var(--faint); } .n { color: #fcd34d; } .w { color: var(--amber); } .e { color: var(--red); }
+
+/* Principles */
+.principles { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+.principle { display: grid; grid-template-columns: 44px 1fr; gap: 16px; padding: 22px; border-radius: 14px; border: 1px solid var(--border); background: rgba(15, 22, 42, 0.45); }
+.principle h4 { margin: 0 0 4px; font-size: 16px; }
+.principle p { margin: 0; color: var(--muted); font-size: 14.5px; }
+
+/* Roadmap */
+.timeline { position: relative; display: grid; gap: 14px; }
+.timeline::before { content: ""; position: absolute; left: 19px; top: 8px; bottom: 8px; width: 2px; background: linear-gradient(var(--teal), var(--violet), rgba(139,92,246,0.1)); }
+.phase { position: relative; display: grid; grid-template-columns: 40px 1fr; gap: 20px; }
+.bullet { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: var(--bg); border: 2px solid var(--border-strong); z-index: 1; font: 600 13px var(--mono); color: var(--muted); }
+.phase.done .bullet { border-color: var(--teal); color: var(--teal); box-shadow: 0 0 18px rgba(45, 212, 191, 0.35); }
+.phase.now .bullet { border-color: var(--blue); color: var(--blue); box-shadow: 0 0 18px rgba(96, 165, 250, 0.4); }
+.phase-body { padding: 18px 22px; border-radius: 14px; border: 1px solid var(--border); background: rgba(15, 22, 42, 0.5); }
+.phase-body header { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.phase-body h4 { margin: 0; font-size: 17px; }
+.status { font: 600 11.5px var(--mono); padding: 3px 9px; border-radius: 999px; letter-spacing: 0.03em; }
+.status.done { color: var(--teal); background: rgba(45, 212, 191, 0.12); }
+.status.now { color: var(--blue); background: rgba(96, 165, 250, 0.14); }
+.status.next { color: var(--muted); background: rgba(255, 255, 255, 0.05); }
+.phase-body p { margin: 8px 0 0; color: var(--muted); font-size: 14.5px; }
+.readnext { display: grid; grid-template-columns: 300px 1fr; gap: 24px; align-items: center;
+  border: 1px solid var(--border-strong); border-radius: var(--radius); overflow: hidden;
+  background: linear-gradient(180deg, rgba(19,28,51,.9), rgba(15,22,42,.9)); }
+.readnext img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.readnext .rn-body { padding: 26px 28px 26px 4px; }
+.readnext h3 { margin: 0 0 8px; font-size: 22px; letter-spacing: -0.01em; }
+.readnext p { margin: 0 0 16px; color: var(--muted); font-size: 15px; }
+.readnext .rn-meta { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-bottom: 14px; }
+@media (max-width: 720px) { .readnext { grid-template-columns: 1fr; } .readnext .rn-body { padding: 0 20px 24px; } }
+.badges { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 4px; }
+.badges img { height: 20px; display: block; }
+.badges a { display: block; line-height: 0; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.chip { font-size: 12.5px; padding: 4px 10px; border-radius: 8px; border: 1px solid var(--border); color: #cdd3e3; background: rgba(255,255,255,0.02); }
+.chip.ok::before { content: "✓ "; color: var(--teal); }
+
+/* Clouds */
+.clouds { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.cloud { padding: 24px; border-radius: 16px; border: 1px solid var(--border); background: rgba(15, 22, 42, 0.5); }
+.cloud.active { border-color: rgba(45, 212, 191, 0.4); }
+.cloud h4 { margin: 0 0 4px; font-size: 18px; }
+.cloud code { font-size: 12.5px; color: var(--teal); }
+.cloud p { margin: 10px 0 0; color: var(--muted); font-size: 14px; }
+
+/* CNCF */
+.cncf { display: grid; grid-template-columns: 1.1fr 1fr; gap: 40px; align-items: start; }
+.fit { display: grid; gap: 12px; }
+.fit div { display: grid; grid-template-columns: 170px 1fr; gap: 16px; padding: 16px 18px; border-radius: 12px; border: 1px solid var(--border); background: rgba(15, 22, 42, 0.5); font-size: 14.5px; }
+.fit b { color: var(--text); font-weight: 600; }
+.fit span { color: var(--muted); }
+.callout {
+  padding: 30px; border-radius: 20px;
+  background: linear-gradient(150deg, rgba(45, 212, 191, 0.14), rgba(139, 92, 246, 0.14));
+  border: 1px solid var(--border-strong);
+}
+.callout h3 { margin: 0 0 10px; font-size: 22px; letter-spacing: -0.02em; }
+.callout p { color: #cdd3e3; margin: 0 0 18px; }
+.callout ul { margin: 0; padding-left: 18px; color: var(--muted); font-size: 14.5px; display: grid; gap: 6px; }
+
+footer { padding: 48px 0 56px; border-top: 1px solid var(--border); color: var(--faint); font-size: 13.5px; }
+footer .wrap { display: flex; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
+
+/* Live demo dashboard: the panel itself is styled by assets/dashboard.css */
+.btn-demo {
+  display: inline-flex; align-items: center; gap: 8px; height: 34px; padding: 0 14px; border-radius: 10px;
+  flex: none; white-space: nowrap;
+  font-size: 13.5px; font-weight: 600; cursor: pointer;
+  border: 1px solid rgba(45, 212, 191, 0.45); color: var(--teal); background: rgba(45, 212, 191, 0.08);
+  transition: background .15s ease, border-color .15s ease;
+}
+.btn-demo:hover { background: rgba(45, 212, 191, 0.16); border-color: var(--teal); }
+.btn-demo .live { width: 7px; height: 7px; border-radius: 50%; background: var(--teal); box-shadow: 0 0 10px var(--teal); }
+@media (prefers-reduced-motion: no-preference) { .btn-demo .live { animation: pulse 2.4s ease-in-out infinite; } }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+
+.demo-backdrop {
+  position: fixed; inset: 0; z-index: 100; display: none;
+  background: rgba(4, 7, 14, 0.82); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  padding: 24px; overflow-y: auto;
+}
+.demo-backdrop[open] { display: block; }
+.demo-backdrop .dash { max-width: 1200px; margin: 0 auto; }
+@media (max-width: 640px) { .demo-backdrop { padding: 10px; } }
+
+/* Onboarding section: a static mock built from the dashboard's own classes */
+.onboard { display: grid; grid-template-columns: 1.25fr 1fr; gap: 26px; align-items: start; }
+.onboard-mock { font-size: 13px; }
+.onboard-mock .dash-body { padding: 14px; }
+.onboard-mock .dash-import-btn { display: inline-flex; align-items: center; height: 26px; }
+.onboard-field { display: flex; align-items: center; height: 28px; padding: 0 8px; border-radius: 8px;
+  font: 12.5px var(--d-mono); color: var(--d-text); background: var(--d-bg); border: 1px solid var(--d-border-strong); }
+.onboard-btn { display: inline-flex; align-items: center; height: 30px; padding: 0 12px; border-radius: 8px;
+  font: 600 12px var(--d-font); border: 1px solid var(--d-border-strong); color: var(--d-muted); }
+.onboard-btn.primary { background: var(--d-accent); border-color: var(--d-accent); color: var(--d-bg); }
+.onboard-points { display: grid; gap: 12px; }
+.onboard-points .btn { justify-self: start; margin-top: 6px; }
+@media (max-width: 980px) { .onboard { grid-template-columns: 1fr; } }
+
+/* Automatic mode block inside onboarding */
+.auto { display: grid; grid-template-columns: 1fr 1.1fr; gap: 26px; align-items: start; margin-top: 40px; padding-top: 36px; border-top: 1px solid var(--border); }
+.auto h3 { font-size: 24px; letter-spacing: -0.02em; margin: 10px 0 10px; }
+.auto p { color: var(--muted); margin: 0 0 16px; }
+.auto p em { font-style: normal; color: var(--text); }
+.auto .checks li { color: #cdd3e3; }
+.auto .checks svg { color: var(--teal); }
+.onboard-mock .hide-sm { display: none; }
+
+/* Alerting: a Grafana panel, a Slack message and a Teams card, all static */
+.alerts { display: grid; grid-template-columns: 1.15fr 1fr; gap: 22px; align-items: start; }
+.gpanel { border: 1px solid var(--border-strong); border-radius: 12px; background: #111217; padding: 12px 14px 10px; font-family: var(--sans); }
+.gpanel-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.gpanel-title { font-weight: 600; font-size: 14px; color: #d8d9da; }
+.gpanel-alert { display: inline-flex; align-items: center; gap: 6px; font: 600 11.5px var(--mono); color: #f2495c; }
+.gpanel-alert i { width: 8px; height: 8px; border-radius: 50%; background: #f2495c; box-shadow: 0 0 10px #f2495c; }
+.gpanel-meta { margin-left: auto; font-size: 11.5px; color: #8e8e8e; }
+.gchart { width: 100%; height: 190px; display: block; }
+.gchart .grid line { stroke: rgba(204,204,220,.12); stroke-width: 1; }
+.gchart text { fill: #8e8e8e; font: 10.5px var(--mono); }
+.gchart .threshold { stroke: #f2495c; stroke-width: 1; stroke-dasharray: 4 4; }
+.gchart .line { fill: none; stroke: #ff9830; stroke-width: 2; stroke-linejoin: round; }
+.gchart .area { fill: rgba(255,152,48,.12); }
+.gchart .firing { fill: rgba(242,73,92,.10); }
+.gchart .mark { stroke: #f2495c; stroke-width: 1.2; }
+.gchart .mark-text { fill: #f2495c; font-weight: 600; }
+.gtable { margin-top: 8px; border-top: 1px solid rgba(204,204,220,.12); font-size: 12px; color: #d8d9da; }
+.gtable-row { display: grid; grid-template-columns: 1.1fr .9fr 1.6fr .4fr; gap: 10px; padding: 6px 0; border-bottom: 1px solid rgba(204,204,220,.07); }
+.gtable-head { color: #8e8e8e; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
+.gtable .mono { font-family: var(--mono); font-size: 11.5px; }
+.gtable .bad { color: #f2495c; font-family: var(--mono); }
+
+.chat-stack { display: grid; gap: 16px; }
+.slack { background: #1a1d21; border: 1px solid rgba(255,255,255,.08); border-radius: 12px; padding: 12px 14px; font-family: var(--sans); color: #d1d2d3; font-size: 13px; }
+.slack-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.slack-app { font-weight: 700; color: #fff; }
+.slack-badge { font-size: 9.5px; font-weight: 700; padding: 1px 4px; border-radius: 3px; background: #3f4144; color: #babbbc; }
+.slack-time { color: #9a9b9c; font-size: 11.5px; }
+.slack-att { border-left: 4px solid #e01e5a; padding-left: 12px; }
+.slack-title { font-weight: 700; color: #fff; margin-bottom: 4px; }
+.slack-text { margin-bottom: 8px; }
+.slack-text code { font: 12px var(--mono); background: #2c2d30; padding: 1px 4px; border-radius: 3px; color: #e8912d; }
+.slack-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 14px; margin-bottom: 10px; }
+.slack-fields b { display: block; font-size: 12px; color: #fff; }
+.slack-fields span { font-size: 12px; }
+.slack-fields .mono { font-family: var(--mono); font-size: 11.5px; }
+.slack-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.slack-btn { font-size: 12.5px; font-weight: 600; padding: 5px 10px; border-radius: 6px; border: 1px solid #565856; color: #d1d2d3; }
+.slack-btn.primary { background: #007a5a; border-color: #007a5a; color: #fff; }
+
+.teams { display: grid; grid-template-columns: 4px 1fr; background: #292929; border: 1px solid rgba(255,255,255,.08); border-radius: 10px; overflow: hidden; font-family: var(--sans); color: #f3f2f1; font-size: 13px; }
+.teams-bar { background: #d13438; }
+.teams-body { padding: 12px 14px; }
+.teams-title { font-weight: 700; display: flex; align-items: center; gap: 8px; }
+.teams-state { font-size: 10.5px; font-weight: 700; padding: 2px 6px; border-radius: 4px; background: #d13438; color: #fff; text-transform: uppercase; }
+.teams-sub { color: #a19f9d; font-size: 12px; margin: 2px 0 10px; }
+.teams-facts { display: grid; gap: 4px; margin-bottom: 10px; }
+.teams-facts div { display: grid; grid-template-columns: 90px 1fr; gap: 10px; }
+.teams-facts span { color: #a19f9d; }
+.teams-facts b { font-weight: 500; }
+.teams-facts .mono { font-family: var(--mono); font-size: 12px; }
+.teams-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.teams-btn { font-size: 12.5px; font-weight: 600; padding: 6px 12px; border-radius: 4px; background: #6264a7; color: #fff; }
+
+.alert-rules { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 22px; }
+@media (max-width: 980px) { .auto, .alerts, .alert-rules { grid-template-columns: 1fr; } }
+
+/* Reveal on scroll */
+.reveal { opacity: 0; transform: translateY(14px); transition: opacity .6s ease, transform .6s ease; }
+.reveal.in { opacity: 1; transform: none; }
+@media (prefers-reduced-motion: reduce) { .reveal { opacity: 1; transform: none; transition: none; } html { scroll-behavior: auto; } }
+
+@media (max-width: 1180px) {
+  .nav-links a[href="#onboarding"], .nav-links a[href="#alerting"] { display: none; }
+}
+@media (max-width: 1040px) {
+  .nav-links a[href="#evidence"], .nav-links a[href="#product"] { display: none; }
+}
+@media (max-width: 980px) {
+  .hero .wrap, .layers, .code-grid, .cncf { grid-template-columns: 1fr; }
+  .cards, .clouds { grid-template-columns: 1fr 1fr; }
+  .features, .steps { grid-template-columns: 1fr 1fr; }
+  .stats { grid-template-columns: 1fr 1fr; }
+  .stat:nth-child(2) { border-right: 0; }
+  .stat:nth-child(-n+2) { border-bottom: 1px solid var(--border); }
+  .nav-links { display: none; }
+  nav .pill { margin-left: auto; }
+}
+@media (max-width: 640px) {
+  .wrap { padding: 0 16px; }
+  header.hero { padding: 64px 0 48px; }
+  section { padding: 72px 0; }
+  .cards, .clouds, .features, .steps, .principles, .stats { grid-template-columns: 1fr; }
+  .stat { border-right: 0; border-bottom: 1px solid var(--border); }
+  .stat:last-child { border-bottom: 0; }
+  .fit div { grid-template-columns: 1fr; gap: 4px; }
+  .layer { padding: 24px; }
+}
+
+/* Alert Operator page additions */
+.concept-bar { background: rgba(251, 191, 36, 0.1); border-bottom: 1px solid rgba(251, 191, 36, 0.35); color: #fde68a; font-size: 13.5px; padding: 8px 0; position: relative; z-index: 60; }
+.concept-bar a { text-decoration: underline; }
+.fsev { display: inline-block; font: 600 10.5px var(--mono); text-transform: uppercase; letter-spacing: .06em; padding: 2px 8px; border-radius: 999px; border: 1px solid; }
+.fsev.crit, .rc-f i.crit, .rc-chip.crit.on { color: var(--red); border-color: rgba(248,113,113,.45); }
+.fsev.warn, .rc-f i.warn, .rc-chip.warn.on { color: var(--amber); border-color: rgba(251,191,36,.45); }
+.fsev.info, .rc-f i.info, .rc-chip.info.on { color: var(--blue); border-color: rgba(96,165,250,.45); }
+.rc { border: 1px solid var(--border-strong); border-radius: var(--radius); background: var(--surface); padding: 18px; }
+.rc-bar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 14px; }
+.rc-bar label { color: var(--muted); font-size: 13px; display: flex; gap: 8px; align-items: center; }
+.rc-bar select { background: var(--surface-2); color: var(--text); border: 1px solid var(--border-strong); border-radius: 8px; padding: 6px 8px; font: 13px var(--sans); }
+.rc-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.rc-chip { background: transparent; color: var(--muted); border: 1px solid var(--border-strong); border-radius: 999px; padding: 4px 10px; font: 12px var(--mono); cursor: pointer; }
+.rc-chip.on { color: var(--text); background: var(--surface-2); border-color: var(--teal); }
+.rc-count { margin-left: auto; color: var(--faint); font: 12px var(--mono); }
+.rc-table { border-top: 1px solid var(--border); font-size: 13.5px; }
+.rc-row { display: grid; grid-template-columns: 2.1fr 1fr .8fr .8fr .8fr 2.2fr; gap: 10px; padding: 9px 4px; border-bottom: 1px solid var(--border); align-items: center; }
+.rc-head { color: var(--faint); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
+.rc-row .mono { font: 12.5px var(--mono); overflow: hidden; text-overflow: ellipsis; }
+.rc-row .none { color: var(--red); font-family: var(--mono); font-size: 12.5px; }
+.rc-f { display: flex; flex-wrap: wrap; gap: 4px; }
+.rc-f i { font: normal 500 11px var(--mono); padding: 1px 7px; border-radius: 999px; border: 1px solid; }
+.rc-f i.ok { color: var(--green); border-color: rgba(74,222,128,.4); }
+.rc-foot { color: var(--faint); font-size: 13px; margin: 12px 0 0; }
+@media (max-width: 760px) {
+  .rc-row { grid-template-columns: 1.6fr 1fr 1.6fr; }
+  .rc-row > :nth-child(3), .rc-row > :nth-child(4), .rc-row > :nth-child(5) { display: none; }
+}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-check" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+</svg>
+
+<div class="concept-bar" role="note"><div class="wrap"><b>Alpha · v0.1.0.</b> The first release is out: install it with Helm. The report card below still runs on made-up data. <a href="#roadmap">Roadmap</a></div></div>
+
+<nav>
+  <div class="wrap">
+    <a class="brand" href="#top" aria-label="Alert Operator home">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#0f162a" stroke="rgba(148,163,255,.25)"/><path d="M10 21V14a6 6 0 0 1 12 0v7" fill="none" stroke="#2dd4bf" stroke-width="2.4" stroke-linecap="round"/><path d="M8 21h16" stroke="#8b5cf6" stroke-width="2.4" stroke-linecap="round"/><circle cx="16" cy="25" r="2" fill="#60a5fa"/></svg>
+      Alert Operator
+    </a>
+    <div class="nav-links">
+      <a href="#problem">Problem</a>
+      <a href="#report">Report card</a>
+      <a href="#findings">Findings</a>
+      <a href="#api">API</a>
+      <a href="#principles">Safety</a>
+      <a href="#roadmap">Roadmap</a>
+      <a href="/">Subnet Operator</a>
+    </div>
+    <span class="pill hide-sm"><span class="dot" style="background:var(--amber);box-shadow:0 0 10px var(--amber)"></span>Alpha · v0.1.0</span>
+  </div>
+</nav>
+
+<header class="hero" id="top">
+  <div class="glow"></div>
+  <div class="grid-bg"></div>
+  <div class="wrap">
+    <div>
+      <div class="eyebrow">Kubernetes operator · Alert rule quality · Alpha</div>
+      <h1>Every alert rule, <span class="grad">with an owner and a verdict.</span></h1>
+      <p class="lead">
+        Alert Operator keeps a live inventory of your Prometheus alert rules and grades each one from
+        Prometheus' own history: <strong>never loaded</strong>, <strong>can never fire</strong>,
+        <strong>noisy</strong>, <strong>flapping</strong>, <strong>always silenced</strong>, <strong>nobody owns it</strong>.
+        Read-only: it never touches a rule, a route or a silence.
+      </p>
+      <div class="cta">
+        <a class="btn btn-primary" href="#report">Try the report card
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+        </a>
+        <a class="btn btn-ghost" href="#api">See the API</a>
+      </div>
+      <div class="hero-meta">
+        <span><svg viewBox="0 0 24 24"><use href="#i-check"/></svg>Read-only</span>
+        <span><svg viewBox="0 0 24 24"><use href="#i-check"/></svg>Works with prometheus-operator</span>
+        <span><svg viewBox="0 0 24 24"><use href="#i-check"/></svg>Prometheus-native</span>
+        <span><svg viewBox="0 0 24 24"><use href="#i-check"/></svg>Apache-2.0</span>
+      </div>
+    </div>
+
+    <div class="terminal reveal" role="img" aria-label="Example output of kubectl get alertrules (illustrative)">
+      <div class="term-bar"><i></i><i></i><i></i><span>kubectl — prod (illustrative)</span></div>
+<div class="term-body"><span class="t-prompt">$</span> <span class="t-cmd">kubectl get alertscopes</span>
+<span class="t-head">NAME  RULES  LOADED  FINDINGS  WINDOW  READY  LAST SYNC</span>
+main  214    <span class="t-warn">199</span>     <span class="t-warn">183</span>       30d     <span class="t-ok">True</span>   41s
+
+<span class="t-prompt">$</span> <span class="t-cmd">kubectl get hsar -n team-payments</span>
+<span class="t-head">ALERT                   TEAM      LOADED  FIRED  LAST FIRED  FINDINGS</span>
+PaymentsHighLatency     payments  <span class="t-ok">true</span>    <span class="t-warn">212</span>    32m         <span class="t-warn">Noisy</span>
+PaymentsQueueBacklog    payments  <span class="t-ok">true</span>    <span class="t-warn">96</span>     3h          <span class="t-warn">Flapping</span>
+PaymentsErrorBudgetBurn payments  <span class="t-bad">false</span>   -      -           <span class="t-bad">NotLoaded</span>
+PaymentsHTTP5xx         payments  <span class="t-ok">true</span>    0      &lt;none&gt;      <span class="t-bad">DeadQuery</span>
+PaymentsCertExpiry      payments  <span class="t-ok">true</span>    2      9d          <span class="t-ok">-</span>
+
+<span class="t-prompt">$</span> <span class="t-cmd">kubectl get hsar paymentserrorbudgetburn-8d21c4 -o jsonpath='{.status.notLoadedReason}'</span>
+<span class="t-bad">the labels of PrometheusRule team-payments/payments-slo do not match ruleSelector of Prometheus monitoring/k8s (role=alert-rules)</span>
+</div>
+    </div>
+  </div>
+</header>
+
+<div class="wrap reveal">
+  <div class="stats">
+    <div class="stat"><b class="grad">0</b><span>writes to rules, routes or silences in v0.1</span></div>
+    <div class="stat"><b>1 object</b><span>per alert rule, next to the rule, readable by its team</span></div>
+    <div class="stat"><b>0 databases</b><span>history comes from Prometheus itself</span></div>
+    <div class="stat"><b>10 findings</b><span>from "never loaded" to "no runbook"</span></div>
+  </div>
+</div>
+
+<section id="problem">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <div class="kicker">The problem</div>
+      <h2>Nobody knows which alerts would actually wake them up.</h2>
+      <p>A cluster collects alert rules from kube-prometheus, from every Helm chart and from every team. After a year
+        the rule set is a mix of rules that work, rules that cannot work and rules everyone has learned to ignore — and
+        nothing tells you which is which.</p>
+    </div>
+    <div class="cards">
+      <div class="card reveal">
+        <div class="icon r"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/></svg></div>
+        <h3>Silently ignored</h3>
+        <p>A <code>PrometheusRule</code> whose labels miss the Prometheus <code>ruleSelector</code> is accepted by <code>kubectl apply</code> and never loaded. The team thinks it is covered.</p>
+      </div>
+      <div class="card reveal">
+        <div class="icon a"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h4l2-6 4 12 2-6h4"/><path d="M3 3l18 18"/></svg></div>
+        <h3>Can never fire</h3>
+        <p>The app renamed its metric; the rule still queries the old name. A valid expression that selects nothing, forever.</p>
+      </div>
+      <div class="card reveal">
+        <div class="icon v"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg></div>
+        <h3>Noise and no owner</h3>
+        <p>Four rules produce most of the pages, one has been silenced for months, and a third of the rules have no team, no runbook and no severity.</p>
+      </div>
+    </div>
+    <p class="section-note reveal">Linters check rules before they ship. On-call tools see alerts after they fire. Nothing watches the rule set
+      itself, in the cluster, all the time.</p>
+  </div>
+</section>
+
+<section id="report" class="alt">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <div class="kicker">Prototype · made-up data</div>
+      <h2>The report card a team would look at.</h2>
+      <p>This is a working mock of the view built from <code>AlertRule</code> objects. Filter by team or by finding;
+        nothing here talks to a real cluster.</p>
+    </div>
+    <div class="rc reveal" id="rc">
+      <div class="rc-bar">
+        <label>Team <select id="rc-team"><option value="">All teams</option></select></label>
+        <div class="rc-chips" id="rc-chips"></div>
+        <span class="rc-count" id="rc-count"></span>
+      </div>
+      <div class="rc-table" role="table" aria-label="Alert rules with findings">
+        <div class="rc-row rc-head" role="row"><span>Alert</span><span>Team</span><span>Fired · 30d</span><span>Firing time</span><span>Last fired</span><span>Findings</span></div>
+        <div id="rc-rows"></div>
+      </div>
+      <p class="rc-foot">Thresholds come from the <code>AlertScope</code>: noisy above 50 activations in the window, flapping above 10 per day with a median under 10 minutes, always silenced above 80% of firing time.</p>
+    </div>
+  </div>
+</section>
+
+<section id="findings">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <div class="kicker">Findings</div>
+      <h2>Ten questions asked of every rule, every fifteen minutes.</h2>
+      <p>Each answer comes from something you already run: the Kubernetes API, Prometheus' rules API and its own
+        <code>ALERTS</code> history, and Alertmanager's silences.</p>
+    </div>
+    <div class="features">
+      <div class="feature reveal"><span class="fsev crit">critical</span><h4>NotLoaded</h4><p>Defined in a <code>PrometheusRule</code>, absent from Prometheus — with the selector that excluded it.</p></div>
+      <div class="feature reveal"><span class="fsev crit">critical</span><h4>LoadError</h4><p>Prometheus reports the group unhealthy or the last evaluation failed.</p></div>
+      <div class="feature reveal"><span class="fsev warn">warning</span><h4>DeadQuery</h4><p>A selector in the expression matches no series, so the rule cannot fire. <code>absent()</code> is understood.</p></div>
+      <div class="feature reveal"><span class="fsev warn">warning</span><h4>Noisy</h4><p>More activations in the window than the scope allows.</p></div>
+      <div class="feature reveal"><span class="fsev warn">warning</span><h4>Flapping</h4><p>Fires often and resolves fast: many activations per day, short median duration.</p></div>
+      <div class="feature reveal"><span class="fsev warn">warning</span><h4>AlwaysSilenced</h4><p>Firing, but covered by a silence most of the time. Fix it or delete it.</p></div>
+      <div class="feature reveal"><span class="fsev warn">warning</span><h4>Unowned</h4><p>No team from the rule, its object or its namespace.</p></div>
+      <div class="feature reveal"><span class="fsev info">info</span><h4>NeverFired · NoRunbook · NoSeverity</h4><p>Quiet for the whole window; missing <code>runbook_url</code>; missing or unknown severity.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="api" class="alt">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <div class="kicker">API · proposed</div>
+      <h2>Declare the scope. Read the verdicts.</h2>
+      <p>Group <code>alerts.hypersurgery.dev</code>, version <code>v1alpha1</code> (proposed). You write one
+        <code>AlertScope</code>; the operator writes one <code>AlertRule</code> per rule, in the rule's own namespace,
+        and removes only what it wrote.</p>
+    </div>
+    <div class="code-grid">
+      <div class="code reveal">
+        <div class="code-head"><b>alertscope.yaml</b><span>you write</span></div>
+<pre><span class="k">apiVersion</span>: <span class="s">alerts.hypersurgery.dev/v1alpha1</span>
+<span class="k">kind</span>: <span class="s">AlertScope</span>
+<span class="k">metadata</span>:
+  <span class="k">name</span>: <span class="s">main</span>
+<span class="k">spec</span>:
+  <span class="k">prometheus</span>:
+    <span class="k">url</span>: <span class="s">http://prometheus-operated.monitoring:9090</span>
+    <span class="k">resourceRef</span>: { <span class="k">namespace</span>: <span class="s">monitoring</span>, <span class="k">name</span>: <span class="s">k8s</span> }
+  <span class="k">alertmanager</span>:
+    <span class="k">url</span>: <span class="s">http://alertmanager-operated.monitoring:9093</span>
+  <span class="k">ownership</span>:
+    <span class="k">teamFrom</span>:
+      - <span class="k">ruleLabel</span>: <span class="s">team</span>
+      - <span class="k">namespaceLabel</span>: <span class="s">hs/team</span>
+    <span class="k">requireRunbook</span>: <span class="n">true</span>
+  <span class="k">quality</span>:
+    <span class="k">window</span>: <span class="s">30d</span>                <span class="c"># capped to real retention</span>
+    <span class="k">noisy</span>:    { <span class="k">firingsAbove</span>: <span class="n">50</span> }
+    <span class="k">flapping</span>: { <span class="k">activationsPerDayAbove</span>: <span class="n">10</span>, <span class="k">medianDurationBelow</span>: <span class="s">10m</span> }
+  <span class="k">queryBudget</span>:
+    <span class="k">timeout</span>: <span class="s">20s</span>
+    <span class="k">maxQueriesPerMinute</span>: <span class="n">120</span></pre>
+      </div>
+      <div class="code reveal">
+        <div class="code-head"><b>alertrule/paymentshighlatency</b><span>the operator writes</span></div>
+<pre><span class="k">spec</span>:
+  <span class="k">source</span>:
+    <span class="k">kind</span>: <span class="s">PrometheusRule</span>
+    <span class="k">name</span>: <span class="s">payments-api</span>
+    <span class="k">alert</span>: <span class="s">PaymentsHighLatency</span>
+  <span class="k">for</span>: <span class="s">5m</span>
+<span class="k">status</span>:
+  <span class="k">loaded</span>: <span class="n">true</span>
+  <span class="k">team</span>: <span class="s">payments</span>
+  <span class="k">quality</span>:
+    <span class="k">activations</span>: <span class="w">212</span>
+    <span class="k">medianFiringDuration</span>: <span class="s">4m</span>
+    <span class="k">firingFraction</span>: <span class="n">0.06</span>
+    <span class="k">lastFired</span>: <span class="s">"2026-11-07T08:40:00Z"</span>
+  <span class="k">findings</span>:
+    - <span class="k">type</span>: <span class="w">Noisy</span>
+      <span class="k">message</span>: <span class="s">212 activations in 30d (limit 50)</span>
+    - <span class="k">type</span>: <span class="e">NoRunbook</span></pre>
+      </div>
+    </div>
+    <p class="section-note reveal">Metrics carry the same verdicts — <code>hs_alert_rule_findings</code>, <code>hs_alert_rule_activations</code>,
+      <code>hs_alert_rules</code> — so a Grafana panel or an ordinary Prometheus rule can track the clean-up.</p>
+  </div>
+</section>
+
+<section id="principles">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <div class="kicker">Safety</div>
+      <h2>It grades your alerts. It never touches them.</h2>
+    </div>
+    <div class="principles">
+      <div class="principle reveal"><div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></div><div><h4>Read-only towards your monitoring</h4><p>Get, list and watch on <code>PrometheusRule</code> and <code>Prometheus</code>; read-only calls to Prometheus and Alertmanager. No write path exists in v0.1.</p></div></div>
+      <div class="principle reveal"><div class="icon r"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/><path d="M4 4l16 16"/></svg></div><div><h4>Deletes only what it created</h4><p>The only objects it writes are its own <code>AlertRule</code> mirrors, marked as such. Anything else is left alone, even with the same name.</p></div></div>
+      <div class="principle reveal"><div class="icon b"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div><div><h4>Gentle on Prometheus</h4><p>Timeouts, concurrency and a query rate limit are part of the API, and the operator reports when it hits them.</p></div></div>
+      <div class="principle reveal"><div class="icon v"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22c5.5-2 8-6 8-11V5l-8-3-8 3v6c0 5 2.5 9 8 11z"/><path d="M12 8v5M12 16v.5"/></svg></div><div><h4>Never judges on missing data</h4><p>The window is capped to the retention Prometheus actually has, and an unreachable Prometheus marks verdicts stale instead of erasing them.</p></div></div>
+    </div>
+  </div>
+</section>
+
+<section id="roadmap" class="alt">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <div class="kicker">Roadmap · proposed</div>
+      <h2>Read first. Write later, opt-in, and only what it owns.</h2>
+    </div>
+    <div class="timeline">
+      <div class="phase done reveal"><div class="bullet">0.1</div><div class="phase-body"><header><h4>Inventory and report card</h4><span class="status done">RELEASED · v0.1.0</span></header>
+        <p><code>AlertScope</code> and <code>AlertRule</code>, the ten findings, <code>hs_alert_</code> metrics, a Grafana dashboard, a Helm chart and an end-to-end test against kube-prometheus-stack in Kind. Read-only.</p></div></div>
+      <div class="phase reveal"><div class="bullet">0.2</div><div class="phase-body"><header><h4>Validation at the door</h4><span class="status next">PLANNED</span></header>
+        <p>An opt-in admission check for <code>PrometheusRule</code> — owner, severity, runbook, a query that parses and selects something, and a rule Prometheus will actually load — plus the same checks as a CLI for CI.</p></div></div>
+      <div class="phase reveal"><div class="bullet">0.3</div><div class="phase-body"><header><h4>Silences as code</h4><span class="status next">PLANNED</span></header>
+        <p><code>AlertSilence</code> with a mandatory expiry, a maximum duration, an owner and a reason, limited to the team's own alerts. Hand-made silences are never edited.</p></div></div>
+      <div class="phase reveal"><div class="bullet">0.4</div><div class="phase-body"><header><h4>Safe team routing</h4><span class="status next">PLANNED</span></header>
+        <p><code>TeamRoute</code> renders a guarded <code>AlertmanagerConfig</code> per team, and a new finding catches alerts that end at nobody.</p></div></div>
+      <div class="phase reveal"><div class="bullet">0.5</div><div class="phase-body"><header><h4>Many clusters</h4><span class="status next">PLANNED</span></header>
+        <p>One view over several clusters; the same rule in ten clusters is one rule with ten verdicts, and drift between them is reported.</p></div></div>
+      <div class="phase reveal"><div class="bullet">1.0</div><div class="phase-body"><header><h4>Stable</h4><span class="status next">PLANNED</span></header>
+        <p><code>v1</code> API with a compatibility promise, upgrade tests, signed multi-arch image and chart, OLM bundle.</p></div></div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <span>Alert Operator · alpha · 2026 · a <a href="/" style="color:var(--muted)">hypersurgery</a> project, sibling of Subnet Operator</span>
+    <span>Kubernetes operator for alert rule inventory and quality — not released</span>
+  </div>
+</footer>
+
+<script>
+  (function () {
+    var els = document.querySelectorAll('.reveal');
+    if (!('IntersectionObserver' in window)) { els.forEach(function (e) { e.classList.add('in'); }); return; }
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) { if (en.isIntersecting) { en.target.classList.add('in'); io.unobserve(en.target); } });
+    }, { rootMargin: '0px 0px -8% 0px', threshold: 0.08 });
+    els.forEach(function (e) { io.observe(e); });
+  })();
+</script>
+<script>
+// Report-card prototype: made-up rules, filtered client-side. No network calls.
+(function () {
+  var SEV = { NotLoaded: 'crit', LoadError: 'crit', DeadQuery: 'warn', Noisy: 'warn', Flapping: 'warn', AlwaysSilenced: 'warn', Unowned: 'warn', NeverFired: 'info', NoRunbook: 'info', NoSeverity: 'info' };
+  var R = [
+    ['PaymentsHighLatency', 'payments', 212, '6%', '32m', ['Noisy', 'NoRunbook']],
+    ['PaymentsQueueBacklog', 'payments', 96, '1%', '3h', ['Flapping']],
+    ['PaymentsErrorBudgetBurn', 'payments', null, '-', '-', ['NotLoaded']],
+    ['PaymentsHTTP5xx', 'payments', 0, '0%', 'never', ['DeadQuery', 'NeverFired']],
+    ['PaymentsCertExpiry', 'payments', 2, '0.1%', '9d', []],
+    ['CheckoutPodRestarts', 'checkout', 61, '3%', '2h', ['Noisy']],
+    ['CheckoutDiskAlmostFull', 'checkout', 14, '88%', 'firing', ['AlwaysSilenced']],
+    ['CheckoutSlowQueries', 'checkout', 0, '0%', 'never', ['NeverFired']],
+    ['SearchIndexLag', 'search', 5, '0.4%', '4d', ['NoRunbook']],
+    ['SearchShardUnassigned', 'search', null, '-', '-', ['LoadError']],
+    ['KubeJobFailed', '', 133, '9%', '11m', ['Noisy', 'Unowned']],
+    ['NodeClockSkewDetected', '', 0, '0%', 'never', ['Unowned', 'NeverFired']],
+    ['LegacyQueueDepth', '', 0, '0%', 'never', ['DeadQuery', 'Unowned', 'NoSeverity']],
+    ['KubePersistentVolumeFillingUp', 'platform', 3, '0.2%', '6d', []],
+    ['etcdHighFsyncDurations', 'platform', 41, '2%', '1d', ['Flapping']]
+  ];
+  var team = document.getElementById('rc-team'), chips = document.getElementById('rc-chips'),
+      rows = document.getElementById('rc-rows'), count = document.getElementById('rc-count');
+  if (!team) return;
+  var active = '';
+  var teams = {}; R.forEach(function (r) { teams[r[1] || '<none>'] = 1; });
+  Object.keys(teams).sort().forEach(function (t) { var o = document.createElement('option'); o.value = t; o.textContent = t; team.appendChild(o); });
+  var kinds = ['', 'NotLoaded', 'LoadError', 'DeadQuery', 'Noisy', 'Flapping', 'AlwaysSilenced', 'Unowned', 'NeverFired', 'NoRunbook'];
+  kinds.forEach(function (k) {
+    var b = document.createElement('button'); b.type = 'button'; b.className = 'rc-chip' + (k ? ' ' + SEV[k] : '');
+    b.textContent = k || 'All'; b.dataset.k = k;
+    b.addEventListener('click', function () { active = k; render(); });
+    chips.appendChild(b);
+  });
+  team.addEventListener('change', render);
+  function el(tag, cls, txt) { var e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; }
+  function render() {
+    chips.querySelectorAll('.rc-chip').forEach(function (b) { b.classList.toggle('on', b.dataset.k === active); });
+    rows.textContent = '';
+    var n = 0;
+    R.forEach(function (r) {
+      var t = r[1] || '<none>';
+      if (team.value && team.value !== t) return;
+      if (active && r[5].indexOf(active) < 0) return;
+      n++;
+      var row = el('div', 'rc-row'); row.setAttribute('role', 'row');
+      row.appendChild(el('span', 'mono', r[0]));
+      row.appendChild(el('span', r[1] ? '' : 'none', t));
+      row.appendChild(el('span', 'mono', r[2] == null ? '-' : String(r[2])));
+      row.appendChild(el('span', 'mono', r[3]));
+      row.appendChild(el('span', 'mono', r[4]));
+      var f = el('span', 'rc-f');
+      if (!r[5].length) f.appendChild(el('i', 'ok', 'healthy'));
+      r[5].forEach(function (k) { f.appendChild(el('i', SEV[k], k)); });
+      row.appendChild(f);
+      rows.appendChild(row);
+    });
+    count.textContent = n + ' of ' + R.length + ' rules';
+  }
+  render();
+})();
+</script>
+<noscript><style>.reveal { opacity: 1; transform: none; }</style></noscript>
+</body>
+</html>

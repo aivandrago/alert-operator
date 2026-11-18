@@ -1,0 +1,9 @@
+bin/
+*.out
+.idea/
+.vscode/
+*.test
+*.kubeconfig
+.e2e-kubeconfig
+Dockerfile.cross
+dist/

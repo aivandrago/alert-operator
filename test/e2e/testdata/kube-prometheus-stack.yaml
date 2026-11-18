@@ -1,0 +1,40 @@
+# kube-prometheus-stack for the e2e: Prometheus, Alertmanager and prometheus-operator, small,
+# with one day of retention and quick evaluation. No Grafana, no node exporter, no default rules:
+# the inventory holds the test's rules only.
+defaultRules:
+  create: false
+grafana:
+  enabled: false
+nodeExporter:
+  enabled: false
+kubeStateMetrics:
+  enabled: false
+kubeControllerManager:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeEtcd:
+  enabled: false
+kubeProxy:
+  enabled: false
+prometheusOperator:
+  admissionWebhooks:
+    enabled: false
+  tls:
+    enabled: false
+  resources:
+    requests: { cpu: 20m, memory: 64Mi }
+    limits: { memory: 256Mi }
+prometheus:
+  prometheusSpec:
+    retention: 1d
+    scrapeInterval: 5s
+    evaluationInterval: 5s
+    resources:
+      requests: { cpu: 50m, memory: 256Mi }
+      limits: { memory: 1Gi }
+alertmanager:
+  alertmanagerSpec:
+    resources:
+      requests: { cpu: 10m, memory: 32Mi }
+      limits: { memory: 128Mi }

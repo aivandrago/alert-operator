@@ -1,0 +1,50 @@
+{{- if .Values.networkPolicy.enabled }}
+{{- $np := .Values.networkPolicy }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "alert-operator.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "alert-operator.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "alert-operator.selectorLabels" . | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - ports:
+        - port: {{ .Values.metrics.port }}
+          protocol: TCP
+      {{- with $np.metricsFrom }}
+      from:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    - ports:
+        # Kubelet probes; most CNIs allow them anyway.
+        - port: {{ .Values.health.port }}
+          protocol: TCP
+  egress:
+    - to:
+        {{- toYaml $np.dns.peers | nindent 8 }}
+      ports:
+        - { port: 53, protocol: UDP }
+        - { port: 53, protocol: TCP }
+    {{- if $np.apiServer.cidrs }}
+    - to:
+        {{- range $np.apiServer.cidrs }}
+        - ipBlock:
+            cidr: {{ . }}
+        {{- end }}
+      ports:
+        - port: {{ $np.apiServer.port }}
+          protocol: TCP
+    {{- end }}
+    - to:
+        {{- toYaml $np.prometheus.peers | nindent 8 }}
+      ports:
+        {{- range $np.prometheus.ports }}
+        - port: {{ . }}
+          protocol: TCP
+        {{- end }}
+{{- end }}

@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+# A new push supersedes the previous run of the same branch.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# The project's own forge runs the full CI, the Kind e2e included, before every release; this
+# public mirror repeats what fits a hosted runner.
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - run: make lint
+
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # Generated code, CRDs, the API reference and the chart's copies are committed, so a pull
+      # request that edits api/ without regenerating them is caught here.
+      - name: Generated code, manifests and API reference are up to date
+        run: |
+          make manifests generate api-docs
+          git diff --exit-code
+
+      - name: Helm chart lints and renders
+        run: |
+          make helm-lint
+          git diff --exit-code charts/
+
+      - name: Unit and envtest tests
+        run: make test
+
+      - name: Build
+        run: make build
+
+      - name: Coverage
+        run: |
+          pct=$(go tool cover -func=cover.out | awk '/^total:/ {print $3}' | tr -d '%')
+          echo "Total coverage: ${pct}%" >> "$GITHUB_STEP_SUMMARY"
+
+  integration:
+    name: Integration (real Prometheus and Alertmanager)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - run: make test-integration

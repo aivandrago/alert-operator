@@ -1,0 +1,358 @@
+---
+# Source: alert-operator/templates/poddisruptionbudget.yaml
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: ao-alert-operator
+  namespace: observability
+  labels:
+    helm.sh/chart: alert-operator-0.1.0
+    app.kubernetes.io/name: alert-operator
+    app.kubernetes.io/instance: ao
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: alert-operator
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: alert-operator
+      app.kubernetes.io/instance: ao
+
+---
+# Source: alert-operator/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ao-alert-operator
+  namespace: observability
+  labels:
+    helm.sh/chart: alert-operator-0.1.0
+    app.kubernetes.io/name: alert-operator
+    app.kubernetes.io/instance: ao
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: alert-operator
+
+---
+# Source: alert-operator/templates/rbac.yaml
+# The operator's cluster-wide rights: read prometheus-operator's objects and namespaces, own
+# AlertRule objects, write AlertScope status and Events. No verb on anything else, and no write
+# verb at all on monitoring.coreos.com (test/chart checks both). The rules match the generated
+# config/rbac/role.yaml.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ao-alert-operator
+  labels:
+    helm.sh/chart: alert-operator-0.1.0
+    app.kubernetes.io/name: alert-operator
+    app.kubernetes.io/instance: ao
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: alert-operator
+rules:
+  - apiGroups: [""]
+    resources: [namespaces]
+    verbs: [get, list, watch]
+  - apiGroups: [alerts.hypersurgery.dev]
+    resources: [alertrules]
+    verbs: [create, delete, get, list, patch, update, watch]
+  - apiGroups: [alerts.hypersurgery.dev]
+    resources: [alertrules/status, alertscopes/status]
+    verbs: [get, patch, update]
+  - apiGroups: [alerts.hypersurgery.dev]
+    resources: [alertscopes]
+    verbs: [get, list, watch]
+  - apiGroups: [events.k8s.io]
+    resources: [events]
+    verbs: [create, patch]
+  - apiGroups: [monitoring.coreos.com]
+    resources: [prometheuses, prometheusrules]
+    verbs: [get, list, watch]
+  # The metrics endpoint authenticates and authorizes its scrapers.
+  - apiGroups: [authentication.k8s.io]
+    resources: [tokenreviews]
+    verbs: [create]
+  - apiGroups: [authorization.k8s.io]
+    resources: [subjectaccessreviews]
+    verbs: [create]
+
+---
+# Source: alert-operator/templates/rbac.yaml
+# Teams read their rules' verdicts with the namespace rights they already have.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ao-alert-operator-view
+  labels:
+    helm.sh/chart: alert-operator-0.1.0
+    app.kubernetes.io/name: alert-operator
+    app.kubernetes.io/instance: ao
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: alert-operator
+    rbac.authorization.k8s.io/aggregate-to-view: "true"
+    rbac.authorization.k8s.io/aggregate-to-edit: "true"
+    rbac.authorization.k8s.io/aggregate-to-admin: "true"
+rules:
+  - apiGroups: [alerts.hypersurgery.dev]
+    resources: [alertrules, alertscopes]
+    verbs: [get, list, watch]
+
+---
+# Source: alert-operator/templates/rbac.yaml
+# Bind this to the service account of the Prometheus that scrapes the operator.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ao-alert-operator-metrics-reader
+  labels:
+    helm.sh/chart: alert-operator-0.1.0
+    app.kubernetes.io/name: alert-operator
+    app.kubernetes.io/instance: ao
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: alert-operator
+rules:
+  - nonResourceURLs: [/metrics]
+    verbs: [get]
+
+---
+# Source: alert-operator/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: ao-alert-operator
+  labels:
+    helm.sh/chart: alert-operator-0.1.0
+    app.kubernetes.io/name: alert-operator
+    app.kubernetes.io/instance: ao
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: alert-operator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: ao-alert-operator
+subjects:
+  - kind: ServiceAccount
+    name: ao-alert-operator
+    namespace: observability
+
+---
+# Source: alert-operator/templates/rbac.yaml
+# In its own namespace only: the auth Secrets of AlertScope endpoints, and the leader election
+# lease.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: ao-alert-operator
+  namespace: observability
+  labels:
+    helm.sh/chart: alert-operator-0.1.0
+    app.kubernetes.io/name: alert-operator
+    app.kubernetes.io/instance: ao
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: alert-operator
+rules:
+  - apiGroups: [""]
+    resources: [secrets]
+    verbs: [get]
+  - apiGroups: [coordination.k8s.io]
+    resources: [leases]
+    verbs: [get, list, watch, create, update, patch, delete]
+  - apiGroups: [""]
+    resources: [events]
+    verbs: [create, patch]
+
+---
+# Source: alert-operator/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ao-alert-operator
+  namespace: observability
+  labels:
+    helm.sh/chart: alert-operator-0.1.0
+    app.kubernetes.io/name: alert-operator
+    app.kubernetes.io/instance: ao
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: alert-operator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: ao-alert-operator
+subjects:
+  - kind: ServiceAccount
+    name: ao-alert-operator
+    namespace: observability
+
+---
+# Source: alert-operator/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: ao-alert-operator-metrics
+  namespace: observability
+  labels:
+    helm.sh/chart: alert-operator-0.1.0
+    app.kubernetes.io/name: alert-operator
+    app.kubernetes.io/instance: ao
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: alert-operator
+spec:
+  selector:
+    app.kubernetes.io/name: alert-operator
+    app.kubernetes.io/instance: ao
+  ports:
+    - name: metrics
+      port: 8443
+      targetPort: metrics
+      protocol: TCP
+
+---
+# Source: alert-operator/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ao-alert-operator
+  namespace: observability
+  labels:
+    helm.sh/chart: alert-operator-0.1.0
+    app.kubernetes.io/name: alert-operator
+    app.kubernetes.io/instance: ao
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: alert-operator
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: alert-operator
+      app.kubernetes.io/instance: ao
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: alert-operator
+        app.kubernetes.io/instance: ao
+    spec:
+      serviceAccountName: ao-alert-operator
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: manager
+          image: "ghcr.io/aivandrago/alert-operator:0.1.0"
+          imagePullPolicy: IfNotPresent
+          args:
+            - --health-probe-bind-address=:8081
+            - --metrics-bind-address=:8443
+            - --metrics-secure=true
+            - --leader-elect
+            - --zap-log-level=info
+          env:
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          ports:
+            - name: metrics
+              containerPort: 8443
+              protocol: TCP
+            - name: health
+              containerPort: 8081
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: health
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: health
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            limits:
+              memory: 256Mi
+            requests:
+              cpu: 20m
+              memory: 64Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            readOnlyRootFilesystem: true
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: alert-operator
+                    app.kubernetes.io/instance: ao
+
+---
+# Source: alert-operator/templates/alertrule-protection.yaml
+# Only the operator writes AlertRule objects (docs/design.md §4.2); the same policy as
+# config/policy, with this release's service account.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: ao-alert-operator-alertrules
+  labels:
+    helm.sh/chart: alert-operator-0.1.0
+    app.kubernetes.io/name: alert-operator
+    app.kubernetes.io/instance: ao
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: alert-operator
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: ["alerts.hypersurgery.dev"]
+        apiVersions: ["*"]
+        operations: ["CREATE", "UPDATE", "DELETE"]
+        resources: ["alertrules", "alertrules/status"]
+  variables:
+    - name: writers
+      expression: >-
+        [
+          'system:serviceaccount:observability:ao-alert-operator',
+          'system:serviceaccount:kube-system:generic-garbage-collector',
+          'system:serviceaccount:kube-system:namespace-controller'
+        ]
+  validations:
+    - expression: request.userInfo.username in variables.writers
+      messageExpression: >-
+        'AlertRule objects are written by alert-operator only; ' + request.userInfo.username +
+        ' may read them. Change the PrometheusRule the rule comes from instead.'
+      reason: Forbidden
+
+---
+# Source: alert-operator/templates/alertrule-protection.yaml
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: ao-alert-operator-alertrules
+  labels:
+    helm.sh/chart: alert-operator-0.1.0
+    app.kubernetes.io/name: alert-operator
+    app.kubernetes.io/instance: ao
+    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: alert-operator
+spec:
+  policyName: ao-alert-operator-alertrules
+  validationActions: ["Deny"]
