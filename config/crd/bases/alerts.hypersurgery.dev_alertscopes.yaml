@@ -1,0 +1,548 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.22.0
+  name: alertscopes.alerts.hypersurgery.dev
+spec:
+  group: alerts.hypersurgery.dev
+  names:
+    categories:
+    - hypersurgery
+    kind: AlertScope
+    listKind: AlertScopeList
+    plural: alertscopes
+    shortNames:
+    - hsas
+    singular: alertscope
+  scope: Cluster
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.rules.total
+      name: Rules
+      type: integer
+    - jsonPath: .status.rules.loaded
+      name: Loaded
+      type: integer
+    - jsonPath: .status.findingsTotal
+      name: Findings
+      type: integer
+    - jsonPath: .status.effectiveWindow
+      name: Window
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="Ready")].status
+      name: Ready
+      type: string
+    - jsonPath: .status.lastSync
+      name: Last Sync
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          AlertScope declares where the operator reads alert rules from (one Prometheus and,
+          optionally, its Alertmanager), which PrometheusRule objects belong to the inventory, and how
+          each rule is judged.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: spec defines the desired state of AlertScope
+            properties:
+              alertmanager:
+                description: alertmanager the silences are read from. Without it AlwaysSilenced
+                  is not evaluated.
+                properties:
+                  authSecretRef:
+                    description: |-
+                      authSecretRef names a Secret in the operator's namespace with the credentials for this
+                      endpoint. Keys read: "token" (bearer token), "username" and "password" (basic auth),
+                      "ca.crt" (CA bundle for the server certificate), "tls.crt" and "tls.key" (client
+                      certificate). All keys are optional; a token and basic auth are mutually exclusive.
+                    properties:
+                      name:
+                        description: name of the Secret.
+                        maxLength: 253
+                        minLength: 1
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  url:
+                    description: url is the base URL of the API, for example http://prometheus-operated.monitoring.svc:9090.
+                    maxLength: 2048
+                    minLength: 1
+                    type: string
+                    x-kubernetes-validations:
+                    - message: url must be an http or https URL
+                      rule: isURL(self) && url(self).getScheme() in ['http', 'https']
+                required:
+                - url
+                type: object
+              namespaceSelector:
+                description: |-
+                  namespaceSelector picks the namespaces whose PrometheusRule objects belong to this
+                  scope. Empty selects all namespaces.
+                properties:
+                  matchExpressions:
+                    description: matchExpressions is a list of label selector requirements.
+                      The requirements are ANDed.
+                    items:
+                      description: |-
+                        A label selector requirement is a selector that contains values, a key, and an operator that
+                        relates the key and values.
+                      properties:
+                        key:
+                          description: key is the label key that the selector applies
+                            to.
+                          type: string
+                        operator:
+                          description: |-
+                            operator represents a key's relationship to a set of values.
+                            Valid operators are In, NotIn, Exists and DoesNotExist.
+                          type: string
+                        values:
+                          description: |-
+                            values is an array of string values. If the operator is In or NotIn,
+                            the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                            the values array must be empty. This array is replaced during a strategic
+                            merge patch.
+                          items:
+                            type: string
+                          type: array
+                          x-kubernetes-list-type: atomic
+                      required:
+                      - key
+                      - operator
+                      type: object
+                    type: array
+                    x-kubernetes-list-type: atomic
+                  matchLabels:
+                    additionalProperties:
+                      type: string
+                    description: |-
+                      matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
+                      map is equivalent to an element of matchExpressions, whose key field is "key", the
+                      operator is "In", and the values array contains only "value". The requirements are ANDed.
+                    type: object
+                type: object
+                x-kubernetes-map-type: atomic
+              ownership:
+                default: {}
+                description: 'ownership: where the team comes from and which hygiene
+                  rules apply.'
+                properties:
+                  requireRunbook:
+                    default: true
+                    description: requireRunbook reports NoRunbook for a rule without
+                      a runbook_url annotation.
+                    type: boolean
+                  requireSeverity:
+                    description: |-
+                      requireSeverity lists the allowed values of the severity label; a rule without one of
+                      them is reported as NoSeverity. Empty means the default: critical, warning, info.
+                    items:
+                      maxLength: 63
+                      type: string
+                    maxItems: 16
+                    type: array
+                    x-kubernetes-list-type: set
+                  teamFrom:
+                    description: |-
+                      teamFrom lists the sources of the team, first match wins. Default: the rule label
+                      "team", then the label "hs/team" on the PrometheusRule object, then on its namespace.
+                    items:
+                      description: TeamSource is one place the owning team of a rule
+                        is read from. Exactly one field is set.
+                      properties:
+                        namespaceLabel:
+                          description: namespaceLabel is a label on the namespace
+                            of the PrometheusRule object.
+                          maxLength: 317
+                          minLength: 1
+                          type: string
+                        objectLabel:
+                          description: objectLabel is a label on the PrometheusRule
+                            object the rule is defined in.
+                          maxLength: 317
+                          minLength: 1
+                          type: string
+                        ruleLabel:
+                          description: ruleLabel is a label on the alerting rule itself.
+                          maxLength: 317
+                          minLength: 1
+                          type: string
+                      type: object
+                      x-kubernetes-validations:
+                      - message: exactly one of ruleLabel, objectLabel and namespaceLabel
+                          must be set
+                        rule: '[has(self.ruleLabel), has(self.objectLabel), has(self.namespaceLabel)].filter(x,
+                          x).size() == 1'
+                    maxItems: 8
+                    type: array
+                    x-kubernetes-list-type: atomic
+                type: object
+              prometheus:
+                description: prometheus the rules and their history are read from.
+                properties:
+                  authSecretRef:
+                    description: |-
+                      authSecretRef names a Secret in the operator's namespace with the credentials for this
+                      endpoint. Keys read: "token" (bearer token), "username" and "password" (basic auth),
+                      "ca.crt" (CA bundle for the server certificate), "tls.crt" and "tls.key" (client
+                      certificate). All keys are optional; a token and basic auth are mutually exclusive.
+                    properties:
+                      name:
+                        description: name of the Secret.
+                        maxLength: 253
+                        minLength: 1
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  resourceRef:
+                    description: |-
+                      resourceRef names the prometheus-operator Prometheus object that runs this Prometheus.
+                      With it, a rule that is defined but not loaded comes with the reason: the
+                      PrometheusRule's labels do not match ruleSelector, or its namespace is outside
+                      ruleNamespaceSelector.
+                    properties:
+                      name:
+                        description: name of the object.
+                        maxLength: 253
+                        minLength: 1
+                        type: string
+                      namespace:
+                        description: namespace of the object.
+                        maxLength: 63
+                        minLength: 1
+                        type: string
+                    required:
+                    - name
+                    - namespace
+                    type: object
+                  url:
+                    description: url is the base URL of the API, for example http://prometheus-operated.monitoring.svc:9090.
+                    maxLength: 2048
+                    minLength: 1
+                    type: string
+                    x-kubernetes-validations:
+                    - message: url must be an http or https URL
+                      rule: isURL(self) && url(self).getScheme() in ['http', 'https']
+                required:
+                - url
+                type: object
+              quality:
+                default: {}
+                description: 'quality: the history window and the thresholds of each
+                  verdict.'
+                properties:
+                  alwaysSilenced:
+                    default: {}
+                    description: alwaysSilenced decides AlwaysSilenced.
+                    properties:
+                      silencedFractionAbove:
+                        default: 0.8
+                        description: |-
+                          silencedFractionAbove: a larger share of the rule's firing time covered by a matching
+                          Alertmanager silence makes it AlwaysSilenced. Between 0 and 1.
+                        exclusiveMinimum: true
+                        maximum: 1
+                        minimum: 0
+                        type: number
+                    type: object
+                  flapping:
+                    default: {}
+                    description: flapping decides Flapping.
+                    properties:
+                      activationsPerDayAbove:
+                        default: 10
+                        description: 'activationsPerDayAbove: more activations per
+                          day than this, on average over the window.'
+                        format: int32
+                        minimum: 1
+                        type: integer
+                      medianDurationBelow:
+                        default: 10m
+                        description: 'medianDurationBelow: the median time the alert
+                          stays firing is shorter than this.'
+                        maxLength: 7
+                        pattern: ^[0-9]{1,6}(s|m|h|d)$
+                        type: string
+                        x-kubernetes-validations:
+                        - message: medianDurationBelow must be greater than zero
+                          rule: int(self.substring(0, size(self)-1)) > 0
+                    type: object
+                  neverFired:
+                    default: {}
+                    description: neverFired decides NeverFired.
+                    properties:
+                      after:
+                        default: 30d
+                        description: 'after: a rule is reported as NeverFired only
+                          once the operator has known it this long.'
+                        maxLength: 7
+                        pattern: ^[0-9]{1,6}(s|m|h|d)$
+                        type: string
+                        x-kubernetes-validations:
+                        - message: after must be at least 1h
+                          rule: 'int(self.substring(0, size(self)-1)) * {''s'': 1,
+                            ''m'': 60, ''h'': 3600, ''d'': 86400}[self.substring(size(self)-1)]
+                            >= 3600'
+                    type: object
+                  noisy:
+                    default: {}
+                    description: noisy decides Noisy.
+                    properties:
+                      firingsAbove:
+                        default: 50
+                        description: 'firingsAbove: more activations than this in
+                          the window make a rule Noisy.'
+                        format: int32
+                        minimum: 1
+                        type: integer
+                    type: object
+                  resyncInterval:
+                    default: 15m
+                    description: resyncInterval is how often the whole scope is read
+                      and judged again. Between 1m and 24h.
+                    maxLength: 7
+                    pattern: ^[0-9]{1,6}(s|m|h|d)$
+                    type: string
+                    x-kubernetes-validations:
+                    - message: resyncInterval must be at least 1m
+                      rule: 'int(self.substring(0, size(self)-1)) * {''s'': 1, ''m'':
+                        60, ''h'': 3600, ''d'': 86400}[self.substring(size(self)-1)]
+                        >= 60'
+                    - message: resyncInterval must be at most 24h
+                      rule: 'int(self.substring(0, size(self)-1)) * {''s'': 1, ''m'':
+                        60, ''h'': 3600, ''d'': 86400}[self.substring(size(self)-1)]
+                        <= 86400'
+                  window:
+                    default: 30d
+                    description: |-
+                      window is the history each verdict looks at. It is capped to the retention Prometheus
+                      reports; status.effectiveWindow shows the window actually used. Between 1h and 90d.
+                    maxLength: 7
+                    pattern: ^[0-9]{1,6}(s|m|h|d)$
+                    type: string
+                    x-kubernetes-validations:
+                    - message: window must be at least 1h
+                      rule: 'int(self.substring(0, size(self)-1)) * {''s'': 1, ''m'':
+                        60, ''h'': 3600, ''d'': 86400}[self.substring(size(self)-1)]
+                        >= 3600'
+                    - message: window must be at most 90d
+                      rule: 'int(self.substring(0, size(self)-1)) * {''s'': 1, ''m'':
+                        60, ''h'': 3600, ''d'': 86400}[self.substring(size(self)-1)]
+                        <= 7776000'
+                type: object
+              queryBudget:
+                default: {}
+                description: queryBudget bounds the load on Prometheus and Alertmanager.
+                properties:
+                  maxConcurrent:
+                    default: 2
+                    description: maxConcurrent queries in flight at once.
+                    format: int32
+                    maximum: 16
+                    minimum: 1
+                    type: integer
+                  maxQueriesPerMinute:
+                    default: 120
+                    description: |-
+                      maxQueriesPerMinute across the scope. When it runs out, the rest of the work waits for
+                      the next sync instead of failing this one.
+                    format: int32
+                    maximum: 6000
+                    minimum: 1
+                    type: integer
+                  timeout:
+                    default: 20s
+                    description: timeout of a single query.
+                    maxLength: 7
+                    pattern: ^[0-9]{1,6}(s|m|h|d)$
+                    type: string
+                    x-kubernetes-validations:
+                    - message: timeout must be at least 1s
+                      rule: 'int(self.substring(0, size(self)-1)) * {''s'': 1, ''m'':
+                        60, ''h'': 3600, ''d'': 86400}[self.substring(size(self)-1)]
+                        >= 1'
+                    - message: timeout must be at most 5m
+                      rule: 'int(self.substring(0, size(self)-1)) * {''s'': 1, ''m'':
+                        60, ''h'': 3600, ''d'': 86400}[self.substring(size(self)-1)]
+                        <= 300'
+                type: object
+            required:
+            - prometheus
+            type: object
+          status:
+            description: status defines the observed state of AlertScope
+            properties:
+              conditions:
+                description: |-
+                  conditions: Ready (reasons Synced, PrometheusUnreachable, AlertmanagerUnreachable,
+                  BudgetExhausted, Conflict, InvalidSpec).
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              conflicts:
+                description: |-
+                  conflicts lists AlertRule objects the operator wanted to write but did not, because an
+                  object of that name exists and is not its own (namespace/name).
+                items:
+                  type: string
+                maxItems: 100
+                type: array
+                x-kubernetes-list-type: atomic
+              effectiveWindow:
+                description: |-
+                  effectiveWindow is the history window actually used: spec.quality.window, capped to the
+                  retention Prometheus reports.
+                maxLength: 7
+                pattern: ^[0-9]{1,6}(s|m|h|d)$
+                type: string
+              findings:
+                additionalProperties:
+                  format: int32
+                  type: integer
+                description: findings counts the rules with each finding type.
+                type: object
+              findingsTotal:
+                description: findingsTotal is the number of findings on all rules
+                  of the scope.
+                format: int32
+                type: integer
+              lastSync:
+                description: lastSync is the time of the last complete, successful
+                  sync.
+                format: date-time
+                type: string
+              observedGeneration:
+                description: observedGeneration is the generation of the spec this
+                  status describes.
+                format: int64
+                type: integer
+              rules:
+                description: rules counts the alerting rules in the scope.
+                properties:
+                  loaded:
+                    description: loaded by Prometheus.
+                    format: int32
+                    type: integer
+                  notLoaded:
+                    description: 'notLoaded: defined in a PrometheusRule in scope
+                      but absent from Prometheus.'
+                    format: int32
+                    type: integer
+                  total:
+                    description: total number of alerting rules in the scope.
+                    format: int32
+                    type: integer
+                required:
+                - loaded
+                - notLoaded
+                - total
+                type: object
+              teams:
+                description: teams lists rule and finding counts per team, sorted
+                  by team.
+                items:
+                  description: TeamSummary counts one team's rules and findings.
+                  properties:
+                    findings:
+                      description: findings on those rules.
+                      format: int32
+                      type: integer
+                    rules:
+                      description: rules owned by the team.
+                      format: int32
+                      type: integer
+                    team:
+                      description: team name; "<none>" for rules without an owner.
+                      type: string
+                  required:
+                  - findings
+                  - rules
+                  - team
+                  type: object
+                type: array
+                x-kubernetes-list-type: atomic
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

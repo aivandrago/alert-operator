@@ -1,0 +1,15 @@
+# Fails hsalert lint and the webhook: an expression that does not parse, and a rule without
+# owner, severity or runbook.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: bad
+  labels: { release: kps }
+spec:
+  groups:
+    - name: bad
+      rules:
+        - alert: DemoBroken
+          expr: rate(demo_up[5m] > 1
+        - alert: DemoNobody
+          expr: demo_up == 0

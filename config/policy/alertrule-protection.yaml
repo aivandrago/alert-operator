@@ -1,0 +1,39 @@
+# Only the operator writes AlertRule objects (docs/design.md §4.2). A CEL admission policy, no
+# webhook: it refuses create, update and delete of AlertRule objects and their status by anyone
+# but the operator's service account, the garbage collector (an AlertRule's owner, its
+# PrometheusRule, was deleted) and the namespace controller (its namespace is being deleted).
+# kustomize names the service account below; the Helm chart renders the same policy with its own.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: alertrules.alerts.hypersurgery.dev
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: ["alerts.hypersurgery.dev"]
+        apiVersions: ["*"]
+        operations: ["CREATE", "UPDATE", "DELETE"]
+        resources: ["alertrules", "alertrules/status"]
+  variables:
+    - name: writers
+      expression: >-
+        [
+          'system:serviceaccount:alert-operator-system:alert-operator-controller-manager',
+          'system:serviceaccount:kube-system:generic-garbage-collector',
+          'system:serviceaccount:kube-system:namespace-controller'
+        ]
+  validations:
+    - expression: request.userInfo.username in variables.writers
+      messageExpression: >-
+        'AlertRule objects are written by alert-operator only; ' + request.userInfo.username +
+        ' may read them. Change the PrometheusRule the rule comes from instead.'
+      reason: Forbidden
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: alertrules.alerts.hypersurgery.dev
+spec:
+  policyName: alertrules.alerts.hypersurgery.dev
+  validationActions: ["Deny"]

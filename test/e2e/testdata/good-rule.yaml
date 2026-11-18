@@ -1,0 +1,15 @@
+# Passes hsalert lint and the webhook in enforce mode.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: good
+  labels: { release: kps }
+spec:
+  groups:
+    - name: good
+      rules:
+        - alert: DemoGood
+          expr: demo_up == 0
+          for: 5m
+          labels: { severity: warning, team: b }
+          annotations: { runbook_url: "https://runbooks.example/demo" }

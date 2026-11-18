@@ -1,0 +1,12 @@
+# Clean rules, but without the label the Prometheus ruleSelector asks for.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata: { name: unselected, namespace: team-a }
+spec:
+  groups:
+    - name: api
+      rules:
+        - alert: ApiDown
+          expr: up{job="api"} == 0
+          labels: { severity: critical, team: payments }
+          annotations: { runbook_url: "https://runbooks.example/api-down" }

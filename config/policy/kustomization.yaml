@@ -1,0 +1,4 @@
+resources:
+- alertrule-protection.yaml
+configurations:
+- kustomizeconfig.yaml

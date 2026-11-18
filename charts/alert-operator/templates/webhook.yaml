@@ -1,0 +1,142 @@
+{{- if .Values.webhook.enabled }}
+{{- $fullname := include "alert-operator.fullname" . }}
+{{- $service := printf "%s-webhook" $fullname }}
+{{- $secret := include "alert-operator.webhook.secretName" . }}
+{{- $existingSecret := .Values.webhook.certificate.existingSecret }}
+{{- $certManager := and (not $existingSecret) (eq (include "alert-operator.webhook.certManager" .) "true") }}
+{{- $caBundle := "" }}
+{{- $certs := dict }}
+{{- if $existingSecret }}
+{{- $caBundle = include "alert-operator.webhook.existingCABundle" . }}
+{{- else if not $certManager }}
+{{- $certs = include "alert-operator.webhook.selfSignedCert" (dict "root" . "service" $service "secret" $secret) | fromYaml }}
+{{- $caBundle = $certs.ca }}
+{{- end }}
+# The validating webhook for PrometheusRule objects (docs/validation.md). It only answers
+# admission reviews; with failurePolicy Ignore an unreachable operator never blocks a change.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $service }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "alert-operator.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - name: webhook
+      port: 443
+      targetPort: webhook
+      protocol: TCP
+  selector:
+    {{- include "alert-operator.selectorLabels" . | nindent 4 }}
+{{- if $certManager }}
+{{- if not .Values.webhook.certificate.issuerRef }}
+---
+# A self-signed issuer of the chart's own, so it does not depend on how the cluster's issuers
+# are named. Point certificate.issuerRef at a real one to have the CA come from elsewhere.
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: {{ $fullname }}-webhook
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "alert-operator.labels" . | nindent 4 }}
+spec:
+  selfSigned: {}
+{{- end }}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ $fullname }}-webhook
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "alert-operator.labels" . | nindent 4 }}
+spec:
+  secretName: {{ $secret }}
+  {{- if not .Values.webhook.certificate.issuerRef }}
+  # Under the self-signed Issuer the certificate is its own CA, and a CA needs a name.
+  commonName: {{ $service | trunc 64 }}
+  {{- end }}
+  duration: {{ .Values.webhook.certificate.duration }}
+  renewBefore: {{ .Values.webhook.certificate.renewBefore }}
+  dnsNames:
+    - {{ printf "%s.%s.svc" $service .Release.Namespace }}
+    - {{ printf "%s.%s.svc.cluster.local" $service .Release.Namespace }}
+  issuerRef:
+    {{- if .Values.webhook.certificate.issuerRef }}
+    {{- toYaml .Values.webhook.certificate.issuerRef | nindent 4 }}
+    {{- else }}
+    name: {{ $fullname }}-webhook
+    kind: Issuer
+    group: cert-manager.io
+    {{- end }}
+{{- else if not $existingSecret }}
+---
+# No cert-manager: the chart signs a certificate itself and reads it back on upgrades until it
+# nears its expiry (see the helper). The annotations record when it signed it.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $secret }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "alert-operator.labels" . | nindent 4 }}
+  annotations:
+    alerts.hypersurgery.dev/webhook-not-before: {{ $certs.notBefore | quote }}
+    alerts.hypersurgery.dev/webhook-not-after: {{ $certs.notAfter | quote }}
+    {{- with $certs.previousCAUntil }}
+    alerts.hypersurgery.dev/webhook-previous-ca-until: {{ . | quote }}
+    {{- end }}
+type: kubernetes.io/tls
+data:
+  ca.crt: {{ $caBundle }}
+  tls.crt: {{ $certs.cert }}
+  tls.key: {{ $certs.key }}
+{{- end }}
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: {{ $fullname }}
+  labels:
+    {{- include "alert-operator.labels" . | nindent 4 }}
+  {{- if $certManager }}
+  annotations:
+    cert-manager.io/inject-ca-from: {{ printf "%s/%s-webhook" .Release.Namespace $fullname }}
+  {{- end }}
+webhooks:
+  - name: prometheusrules.alerts.hypersurgery.dev
+    admissionReviewVersions: [v1]
+    sideEffects: None
+    failurePolicy: {{ .Values.webhook.failurePolicy }}
+    timeoutSeconds: {{ .Values.webhook.timeoutSeconds }}
+    clientConfig:
+      service:
+        name: {{ $service }}
+        namespace: {{ .Release.Namespace }}
+        path: /validate-monitoring-coreos-com-v1-prometheusrule
+        port: 443
+      {{- if $caBundle }}
+      caBundle: {{ $caBundle }}
+      {{- end }}
+    # Namespaces labelled alerts.hypersurgery.dev/validation=off are never sent.
+    namespaceSelector:
+      matchExpressions:
+        - key: alerts.hypersurgery.dev/validation
+          operator: NotIn
+          values: ["off"]
+        {{- with .Values.webhook.namespaceSelector.matchExpressions }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.webhook.namespaceSelector.matchLabels }}
+      matchLabels:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    rules:
+      - apiGroups: [monitoring.coreos.com]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [prometheusrules]
+{{- end }}

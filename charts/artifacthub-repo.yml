@@ -1,0 +1,11 @@
+# Artifact Hub metadata for the OCI chart repository oci://ghcr.io/aivandrago/charts/alert-operator.
+#
+# An OCI repository has no index.yaml to sit next to, so the release workflow pushes this file
+# to the registry itself, under the tag "artifacthub.io", where Artifact Hub looks for it
+# (https://artifacthub.io/docs/topics/repositories/helm-charts/#oci-support).
+#
+# repositoryID is added here once the repository is registered in Artifact Hub's control panel;
+# it is not a secret, and gives the Verified publisher badge from the next release on.
+owners:
+  - name: Ivan Drago
+    email: feverondiva@proton.me

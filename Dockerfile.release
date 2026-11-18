@@ -1,0 +1,13 @@
+# The release image. The release workflow cross-compiles the manager for each architecture on its
+# own runner (Go needs no emulation, CGO is off), and this file only packages the result, so
+# buildx needs no QEMU for the arm64 image.
+#
+# It relies on BuildKit's TARGETARCH, so it is for buildx only. For a local build use the main
+# Dockerfile, which compiles inside the image.
+FROM gcr.io/distroless/static:nonroot
+ARG TARGETARCH
+WORKDIR /
+COPY dist/manager-linux-${TARGETARCH} /manager
+USER 65532:65532
+
+ENTRYPOINT ["/manager"]

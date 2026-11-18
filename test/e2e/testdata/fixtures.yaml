@@ -1,0 +1,146 @@
+# The e2e fixtures: a tiny exporter whose demo_flap flips every ten seconds, scraped through a
+# PodMonitor, and one PrometheusRule per v0.1 finding.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: team-a
+  labels:
+    hs/team: a
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: team-b
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo-exporter
+  namespace: team-a
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: demo-exporter }
+  template:
+    metadata:
+      labels: { app: demo-exporter }
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile: { type: RuntimeDefault }
+      volumes:
+        - name: www
+          emptyDir: {}
+      containers:
+        - name: exporter
+          image: busybox:1.37.0
+          command:
+            - sh
+            - -c
+            - |
+              while true; do
+                printf 'demo_up 1\ndemo_silenced 1\ndemo_flap %d\n' $(( ($(date +%s) / 10) % 2 )) > /www/metrics.tmp
+                mv /www/metrics.tmp /www/metrics
+                sleep 1
+              done &
+              exec httpd -f -p 8080 -h /www
+          ports:
+            - { name: metrics, containerPort: 8080 }
+          volumeMounts:
+            - { name: www, mountPath: /www }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+          resources:
+            requests: { cpu: 5m, memory: 8Mi }
+            limits: { memory: 32Mi }
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: demo-exporter
+  namespace: team-a
+  labels: { release: kps }
+spec:
+  # busybox httpd serves the file without a Prometheus content type.
+  fallbackScrapeProtocol: PrometheusText0.0.4
+  selector:
+    matchLabels: { app: demo-exporter }
+  podMetricsEndpoints:
+    - port: metrics
+      path: /metrics
+      interval: 5s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata: { name: fine, namespace: team-a, labels: { release: kps } }
+spec:
+  groups:
+    - name: fine
+      rules:
+        - alert: DemoFine
+          expr: demo_up == 0
+          labels: { severity: warning }
+          annotations: { runbook_url: "https://runbooks.example/demo" }
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata: { name: flappy, namespace: team-a, labels: { release: kps } }
+spec:
+  groups:
+    - name: flappy
+      rules:
+        - alert: DemoFlapping
+          expr: demo_flap == 1
+          labels: { severity: warning }
+          annotations: { runbook_url: "https://runbooks.example/demo" }
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata: { name: dead, namespace: team-a, labels: { release: kps } }
+spec:
+  groups:
+    - name: dead
+      rules:
+        - alert: DemoDead
+          expr: demo_renamed_metric > 0
+          labels: { severity: warning }
+          annotations: { runbook_url: "https://runbooks.example/demo" }
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata: { name: silenced, namespace: team-a, labels: { release: kps } }
+spec:
+  groups:
+    - name: silenced
+      rules:
+        - alert: DemoSilenced
+          expr: demo_silenced == 1
+          labels: { severity: warning }
+          annotations: { runbook_url: "https://runbooks.example/demo" }
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata: { name: unowned, namespace: team-b, labels: { release: kps } }
+spec:
+  groups:
+    - name: unowned
+      rules:
+        - alert: DemoUnowned
+          expr: demo_up == 0
+---
+# Missing the release label kube-prometheus-stack's ruleSelector asks for: never loaded.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata: { name: notloaded, namespace: team-b }
+spec:
+  groups:
+    - name: notloaded
+      rules:
+        - alert: DemoNotLoaded
+          expr: demo_up == 0
+          labels: { severity: warning }
+          annotations: { runbook_url: "https://runbooks.example/demo" }

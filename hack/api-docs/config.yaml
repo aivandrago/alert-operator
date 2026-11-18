@@ -1,0 +1,6 @@
+# crd-ref-docs configuration for docs/reference/api.md (`make api-docs`).
+processor:
+  ignoreFields:
+    - "TypeMeta$"
+render:
+  kubernetesVersion: "1.34"

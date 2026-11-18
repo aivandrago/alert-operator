@@ -1,0 +1,69 @@
+apiVersion: v2
+name: alert-operator
+description: Kubernetes operator that keeps a read-only inventory of your Prometheus alert rules with an owner and a quality verdict for each
+type: application
+version: 0.2.0
+appVersion: "0.2.0"
+kubeVersion: ">=1.30.0-0"
+keywords:
+  - prometheus
+  - alertmanager
+  - alerting
+  - prometheus-operator
+  - inventory
+  - observability
+home: https://hypersurgery.dev/alert-operator/
+sources:
+  - https://github.com/aivandrago/alert-operator
+maintainers:
+  - name: Ivan Drago
+    email: feverondiva@proton.me
+    url: https://github.com/aivandrago
+annotations:
+  artifacthub.io/license: Apache-2.0
+  artifacthub.io/operator: "true"
+  artifacthub.io/operatorCapabilities: Basic Install
+  artifacthub.io/category: monitoring-logging
+  artifacthub.io/prerelease: "true"
+  artifacthub.io/images: |
+    - name: alert-operator
+      image: ghcr.io/aivandrago/alert-operator:0.2.0
+      platforms:
+        - linux/amd64
+        - linux/arm64
+  artifacthub.io/links: |
+    - name: Documentation
+      url: https://github.com/aivandrago/alert-operator/blob/main/docs/install.md
+    - name: Source
+      url: https://github.com/aivandrago/alert-operator
+    - name: support
+      url: https://github.com/aivandrago/alert-operator/issues
+  artifacthub.io/changes: |
+    - kind: added
+      description: An opt-in validating webhook for PrometheusRule (webhook.enabled, off by default) with the checks LoadError, NotLoaded, Unowned, NoSeverity, NoRunbook and DeadQuery; warn mode by default, enforce per namespace with the label alerts.hypersurgery.dev/validation; failurePolicy Ignore
+    - kind: added
+      description: The webhook's certificate from cert-manager when installed, otherwise signed by the chart and renewed on upgrade, or an existing Secret
+    - kind: added
+      description: hsalert lint, a CLI with the same checks for CI pipelines (text, JSON and GitHub annotations), released for linux and darwin on amd64 and arm64 with signed checksums
+    - kind: added
+      description: Metrics hs_alert_webhook_reviews_total and hs_alert_webhook_review_duration_seconds
+  artifacthub.io/crdsExamples: |
+    - apiVersion: alerts.hypersurgery.dev/v1alpha1
+      kind: AlertScope
+      metadata:
+        name: main
+      spec:
+        prometheus:
+          url: http://prometheus-operated.monitoring.svc:9090
+          resourceRef: { namespace: monitoring, name: k8s }
+        alertmanager:
+          url: http://alertmanager-operated.monitoring.svc:9093
+  artifacthub.io/crds: |
+    - kind: AlertScope
+      version: v1alpha1
+      name: alertscopes.alerts.hypersurgery.dev
+      description: Where to read alert rules from and how to judge them
+    - kind: AlertRule
+      version: v1alpha1
+      name: alertrules.alerts.hypersurgery.dev
+      description: Read-only mirror of one alerting rule with its owner and quality verdict

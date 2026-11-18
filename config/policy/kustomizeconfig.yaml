@@ -1,0 +1,8 @@
+# Keeps the binding pointing at the policy when kustomize prefixes names.
+nameReference:
+- kind: ValidatingAdmissionPolicy
+  group: admissionregistration.k8s.io
+  fieldSpecs:
+  - kind: ValidatingAdmissionPolicyBinding
+    group: admissionregistration.k8s.io
+    path: spec/policyName
