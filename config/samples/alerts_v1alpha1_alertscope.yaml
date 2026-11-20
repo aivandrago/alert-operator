@@ -1,0 +1,31 @@
+apiVersion: alerts.hypersurgery.dev/v1alpha1
+kind: AlertScope
+metadata:
+  name: main
+spec:
+  prometheus:
+    url: http://prometheus-operated.monitoring.svc:9090
+    resourceRef: { namespace: monitoring, name: k8s }
+  alertmanager:
+    url: http://alertmanager-operated.monitoring.svc:9093
+  namespaceSelector:
+    matchExpressions:
+      - { key: kubernetes.io/metadata.name, operator: NotIn, values: [kube-system] }
+  ownership:
+    teamFrom:
+      - ruleLabel: team
+      - objectLabel: hs/team
+      - namespaceLabel: hs/team
+    requireRunbook: true
+    requireSeverity: [critical, warning, info]
+  quality:
+    window: 30d
+    resyncInterval: 15m
+    noisy: { firingsAbove: 50 }
+    flapping: { activationsPerDayAbove: 10, medianDurationBelow: 10m }
+    neverFired: { after: 30d }
+    alwaysSilenced: { silencedFractionAbove: 0.8 }
+  queryBudget:
+    timeout: 20s
+    maxConcurrent: 2
+    maxQueriesPerMinute: 120

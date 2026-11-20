@@ -1,0 +1,47 @@
+{{- if .Values.prometheusRule.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "alert-operator.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "alert-operator.labels" . | nindent 4 }}
+    {{- with .Values.prometheusRule.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  groups:
+    - name: alert-operator
+      rules:
+        - alert: AlertOperatorSyncStale
+          # Two missed resyncs at the default interval (15m).
+          expr: time() - hs_alert_scope_last_sync_timestamp_seconds > 1800
+          for: 15m
+          labels:
+            severity: warning
+            team: platform
+          annotations:
+            summary: "AlertScope {{`{{ $labels.scope }}`}} has not synced for over 30 minutes"
+            description: "kubectl describe alertscope {{`{{ $labels.scope }}`}} shows the Ready condition's reason (PrometheusUnreachable, BudgetExhausted, ...)."
+            runbook_url: https://hypersurgery.dev/alert-operator/
+        - alert: AlertOperatorPrometheusUnreachable
+          expr: sum by (scope) (increase(hs_alert_query_total{target="prometheus",result=~"unreachable|unauthorized"}[15m])) > 0
+            unless sum by (scope) (increase(hs_alert_query_total{target="prometheus",result="ok"}[15m])) > 0
+          for: 15m
+          labels:
+            severity: warning
+            team: platform
+          annotations:
+            summary: "alert-operator cannot read Prometheus for scope {{`{{ $labels.scope }}`}}"
+            runbook_url: https://hypersurgery.dev/alert-operator/
+        - alert: AlertOperatorQueryBudgetExhausted
+          expr: increase(hs_alert_query_budget_exhausted_total[1h]) > 0
+          for: 1h
+          labels:
+            severity: info
+            team: platform
+          annotations:
+            summary: "Scope {{`{{ $labels.scope }}`}} runs out of query budget every sync; verdicts lag behind"
+            description: "Raise spec.queryBudget.maxQueriesPerMinute or the resyncInterval of the AlertScope."
+            runbook_url: https://hypersurgery.dev/alert-operator/
+{{- end }}

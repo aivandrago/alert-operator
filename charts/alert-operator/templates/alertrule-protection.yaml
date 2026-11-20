@@ -1,0 +1,45 @@
+{{- if .Values.alertRuleProtection.enabled }}
+# Only the operator writes AlertRule objects (docs/design.md §4.2); the same policy as
+# config/policy, with this release's service account.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: {{ include "alert-operator.fullname" . }}-alertrules
+  labels:
+    {{- include "alert-operator.labels" . | nindent 4 }}
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: ["alerts.hypersurgery.dev"]
+        apiVersions: ["*"]
+        operations: ["CREATE", "UPDATE", "DELETE"]
+        resources: ["alertrules", "alertrules/status", "alertsilences/status"]
+  variables:
+    - name: writers
+      expression: >-
+        [
+          '{{ include "alert-operator.username" . }}',
+          'system:serviceaccount:kube-system:generic-garbage-collector',
+          'system:serviceaccount:kube-system:namespace-controller'
+        ]
+  validations:
+    - expression: request.userInfo.username in variables.writers
+      messageExpression: >-
+        (request.resource.resource == 'alertsilences' ?
+          'The status of AlertSilence objects is written by alert-operator only; ' + request.userInfo.username +
+          ' may change the spec.' :
+          'AlertRule objects are written by alert-operator only; ' + request.userInfo.username +
+          ' may read them. Change the PrometheusRule the rule comes from instead.')
+      reason: Forbidden
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: {{ include "alert-operator.fullname" . }}-alertrules
+  labels:
+    {{- include "alert-operator.labels" . | nindent 4 }}
+spec:
+  policyName: {{ include "alert-operator.fullname" . }}-alertrules
+  validationActions: ["Deny"]
+{{- end }}

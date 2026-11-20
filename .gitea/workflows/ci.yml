@@ -1,0 +1,93 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  # Weekly, so govulncheck (a live database) and the e2e against current images are exercised
+  # even in a quiet week.
+  schedule:
+    - cron: "41 3 * * 1"
+
+# A new push supersedes the previous run of the same branch. The event is part of the group so
+# the weekly run on master and a push to master do not cancel each other.
+concurrency:
+  group: ci-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Every job runs on this project's own runner (label `operator-alerts`, docs/ci.md), so its
+  # CI neither waits for nor delays the owner's other projects.
+  lint:
+    runs-on: operator-alerts
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          # The runner executes on the host, where the module and build caches persist between
+          # jobs; restoring an archive over them is slower than using them.
+          cache: false
+      - name: Lint
+        run: make lint
+      - name: Semgrep
+        run: make semgrep
+      # Its database is live, so this step can turn red without a change to the code; the
+      # weekly run is what notices that between pull requests. It checks the built binary: the
+      # scan of the sources needs more memory than the runner has.
+      - name: govulncheck
+        run: make govulncheck
+
+  test:
+    runs-on: operator-alerts
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Generated code and manifests are up to date
+        run: |
+          make manifests generate api-docs
+          git diff --exit-code
+      - name: Helm chart lints and renders, CRDs and dashboard copied
+        run: |
+          make helm-lint
+          git diff --exit-code charts/
+      - name: Unit and envtest tests
+        run: make test
+      - name: Build
+        run: make build
+
+  # The whole operator against a real kube-apiserver, Prometheus and Alertmanager, no Docker:
+  # every finding but NeverFired, in about three minutes.
+  integration:
+    runs-on: operator-alerts
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Integration test (envtest, Prometheus, Alertmanager)
+        run: make test-integration
+
+  # Everything as a user installs it, in Kind: kube-prometheus-stack, the fixtures, a silence,
+  # the operator from its chart and image. Needs Docker; about 15 minutes.
+  e2e:
+    runs-on: operator-alerts
+    env:
+      # A cluster and kubeconfig per run, so parallel runs on the same runner do not collide.
+      KIND_CLUSTER: ao-e2e-${{ github.run_id }}
+      KUBECONFIG: ${{ github.workspace }}/.e2e-kubeconfig
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: E2E tests (Kind, kube-prometheus-stack)
+        run: make test-e2e KIND_CLUSTER="$KIND_CLUSTER"
+      - name: Clean up
+        if: always()
+        run: make cleanup-test-e2e KIND_CLUSTER="$KIND_CLUSTER" || true

@@ -1,0 +1,10 @@
+{{- if .Values.scope.create }}
+apiVersion: alerts.hypersurgery.dev/v1alpha1
+kind: AlertScope
+metadata:
+  name: {{ .Values.scope.name }}
+  labels:
+    {{- include "alert-operator.labels" . | nindent 4 }}
+spec:
+  {{- toYaml .Values.scope.spec | nindent 2 }}
+{{- end }}

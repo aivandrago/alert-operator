@@ -1,0 +1,10 @@
+groups:
+  - name: api
+    rules:
+      - record: job:up:sum
+        expr: sum by (job) (up)
+      - alert: ApiDown
+        expr: up{job="api"} == 0
+        for: 5m
+        labels: { severity: critical, team: payments }
+        annotations: { runbook_url: "https://runbooks.example/api-down" }

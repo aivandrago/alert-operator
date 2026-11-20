@@ -1,0 +1,75 @@
+apiVersion: v2
+name: alert-operator
+description: Kubernetes operator that keeps a read-only inventory of your Prometheus alert rules with an owner and a quality verdict for each
+type: application
+version: 0.3.0
+appVersion: "0.3.0"
+kubeVersion: ">=1.30.0-0"
+keywords:
+  - prometheus
+  - alertmanager
+  - alerting
+  - prometheus-operator
+  - inventory
+  - observability
+home: https://hypersurgery.dev/alert-operator/
+sources:
+  - https://github.com/aivandrago/alert-operator
+maintainers:
+  - name: Ivan Drago
+    email: feverondiva@proton.me
+    url: https://github.com/aivandrago
+annotations:
+  artifacthub.io/license: Apache-2.0
+  artifacthub.io/operator: "true"
+  artifacthub.io/operatorCapabilities: Basic Install
+  artifacthub.io/category: monitoring-logging
+  artifacthub.io/prerelease: "true"
+  artifacthub.io/images: |
+    - name: alert-operator
+      image: ghcr.io/aivandrago/alert-operator:0.3.0
+      platforms:
+        - linux/amd64
+        - linux/arm64
+  artifacthub.io/links: |
+    - name: Documentation
+      url: https://github.com/aivandrago/alert-operator/blob/main/docs/install.md
+    - name: Source
+      url: https://github.com/aivandrago/alert-operator
+    - name: support
+      url: https://github.com/aivandrago/alert-operator/issues
+  artifacthub.io/changes: |
+    - kind: added
+      description: AlertSilence, Alertmanager silences as code with an owner, a reason and a mandatory end within the scope's silences.maxDuration, limited to alerts of the namespace's own rules
+    - kind: added
+      description: Opt-in writes (writes.enabled, off by default) and a per-scope mode Off, Propose or Apply; Propose and dryRun show the silence and the alerts it would match without writing
+    - kind: added
+      description: The operator changes and expires only silences it created (createdBy alert-operator and a marker with the object's UID, checked before every write); a silence ended by a person is not recreated
+    - kind: added
+      description: Audit log line and Events per write, metrics hs_alert_silence_writes_total and hs_alert_silences
+    - kind: fixed
+      description: AlertRule objects of a scope deleted while no replica held the leader lease are now removed when the next leader starts
+  artifacthub.io/crdsExamples: |
+    - apiVersion: alerts.hypersurgery.dev/v1alpha1
+      kind: AlertScope
+      metadata:
+        name: main
+      spec:
+        prometheus:
+          url: http://prometheus-operated.monitoring.svc:9090
+          resourceRef: { namespace: monitoring, name: k8s }
+        alertmanager:
+          url: http://alertmanager-operated.monitoring.svc:9093
+  artifacthub.io/crds: |
+    - kind: AlertScope
+      version: v1alpha1
+      name: alertscopes.alerts.hypersurgery.dev
+      description: Where to read alert rules from and how to judge them
+    - kind: AlertRule
+      version: v1alpha1
+      name: alertrules.alerts.hypersurgery.dev
+      description: Read-only mirror of one alerting rule with its owner and quality verdict
+    - kind: AlertSilence
+      version: v1alpha1
+      name: alertsilences.alerts.hypersurgery.dev
+      description: An Alertmanager silence declared as code, with owner, reason and mandatory end

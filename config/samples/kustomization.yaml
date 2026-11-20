@@ -1,0 +1,5 @@
+## Append samples of your project ##
+resources:
+- alerts_v1alpha1_alertscope.yaml
+- alerts_v1alpha1_alertsilence.yaml
+# +kubebuilder:scaffold:manifestskustomizesamples

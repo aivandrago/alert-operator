@@ -1,0 +1,89 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: manager-role
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - namespaces
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - alerts.hypersurgery.dev
+  resources:
+  - alertrules
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - alerts.hypersurgery.dev
+  resources:
+  - alertrules/status
+  - alertscopes/status
+  - alertsilences/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - alerts.hypersurgery.dev
+  resources:
+  - alertscopes
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - alerts.hypersurgery.dev
+  resources:
+  - alertsilences
+  verbs:
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - alerts.hypersurgery.dev
+  resources:
+  - alertsilences/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - events.k8s.io
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
+- apiGroups:
+  - monitoring.coreos.com
+  resources:
+  - prometheuses
+  - prometheusrules
+  verbs:
+  - get
+  - list
+  - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: manager-role
+  namespace: alert-operator-system
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - get

@@ -1,0 +1,23 @@
+alert-operator {{ .Chart.AppVersion }} is installed in {{ .Release.Namespace }}. It only reads:
+Prometheus, Alertmanager and your PrometheusRule objects are never changed.
+
+{{- if not .Values.scope.create }}
+
+Create an AlertScope to start the inventory:
+
+  kubectl apply -f - <<EOF2
+  apiVersion: alerts.hypersurgery.dev/v1alpha1
+  kind: AlertScope
+  metadata:
+    name: main
+  spec:
+    prometheus:
+      url: http://prometheus-operated.monitoring.svc:9090
+  EOF2
+{{- end }}
+
+Then:
+
+  kubectl get alertscope                 # rules, findings, window, ready
+  kubectl get alertrules -A              # one per alerting rule, with its findings
+  kubectl get alertrules -n <namespace>  # one team's rules

@@ -1,0 +1,174 @@
+# Default values for alert-operator.
+
+# Two replicas: one holds the leader election lease and reconciles, the other takes over when
+# the leader's node is drained or the pod dies.
+replicaCount: 2
+
+image:
+  repository: ghcr.io/aivandrago/alert-operator
+  tag: ""            # defaults to .Chart.AppVersion
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+rbac:
+  # Adds get/list/watch on AlertRule and AlertScope to the built-in "view" ClusterRole (and so to
+  # "edit" and "admin"): a team with view rights in its namespace sees its rules' verdicts.
+  aggregateToView: true
+
+leaderElection:
+  enabled: true
+
+# Verbose logs (debug level) for troubleshooting.
+logLevel: info
+
+metrics:
+  port: 8443
+  # HTTPS with authentication and authorization (TokenReview/SubjectAccessReview). With false,
+  # plain HTTP: only behind a NetworkPolicy.
+  secure: true
+  serviceMonitor:
+    # A prometheus-operator ServiceMonitor for the operator's own metrics.
+    enabled: false
+    interval: 60s
+    labels: {}
+
+health:
+  port: 8081
+
+resources:
+  requests:
+    cpu: 20m
+    memory: 64Mi
+  limits:
+    memory: 256Mi
+
+podSecurityContext:
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: [ALL]
+
+podAnnotations: {}
+podLabels: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
+priorityClassName: ""
+extraArgs: []
+extraEnv: []
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+# Writes to Alertmanager (v0.3, docs/silences.md): with true the manager creates, updates and
+# expires the silences of AlertSilence objects, for scopes whose silences.mode is Apply, and only
+# silences it created. With false every AlertSilence is only proposed.
+writes:
+  enabled: false
+
+# The validating admission webhook for PrometheusRule objects (docs/validation.md): the checks of
+# hsalert lint at the door. Off by default; when on, every namespace is in defaultMode unless
+# its label alerts.hypersurgery.dev/validation says enforce, warn or off.
+webhook:
+  enabled: false
+  port: 9443
+  # warn admits everything and returns the problems as warnings; enforce denies an object with
+  # a blocking problem. Namespaces choose for themselves with the label.
+  defaultMode: warn
+  # Ignore: an operator that is down, upgrading or slow never stops a PrometheusRule change.
+  # Fail turns the webhook into a gate the cluster depends on.
+  failurePolicy: Ignore
+  timeoutSeconds: 5
+  # More conditions on the namespaces sent to the webhook, in addition to excluding the ones
+  # labelled off.
+  namespaceSelector:
+    matchLabels: {}
+    matchExpressions: []
+  certificate:
+    # auto uses cert-manager when its API is installed and a certificate signed by the chart
+    # otherwise; true or false decides it. Use cert-manager with GitOps: helm template (Argo CD,
+    # Flux) cannot read back the chart-signed certificate and signs a new CA on every render.
+    certManager: auto
+    # An issuer of yours instead of the chart's self-signed one (cert-manager only).
+    issuerRef: {}
+    duration: 8760h
+    renewBefore: 720h
+    # A kubernetes.io/tls Secret you manage, with ca.crt; caBundle (PEM) when helm template
+    # cannot read it.
+    existingSecret: ""
+    caBundle: ""
+
+# Only the operator may write AlertRule objects: a ValidatingAdmissionPolicy (CEL, built into
+# the API server since Kubernetes 1.30, no webhook) refuses everyone else, except the garbage
+# collector and the namespace controller.
+alertRuleProtection:
+  enabled: true
+
+# An AlertScope created with the chart. Most clusters have one Prometheus and need exactly this.
+# The spec is the AlertScope's (docs/reference/api.md); unset fields take the API's defaults.
+scope:
+  create: false
+  name: main
+  spec:
+    prometheus:
+      url: http://prometheus-operated.monitoring.svc:9090
+    #  resourceRef: { namespace: monitoring, name: k8s }
+    # alertmanager:
+    #   url: http://alertmanager-operated.monitoring.svc:9093
+    # silences:
+    #   mode: Propose        # Off (default), Propose, Apply (with writes.enabled)
+    #   maxDuration: 7d
+
+# Egress only to the API server, DNS, and the Prometheus and Alertmanager pods named here;
+# ingress only to the metrics port, from the namespaces named here.
+networkPolicy:
+  enabled: false
+  # The API server's addresses (kubectl get endpoints kubernetes -o wide) and port.
+  apiServer:
+    cidrs: []
+    port: 443
+  # Pods the operator may query, as NetworkPolicy peers (namespaceSelector/podSelector, or
+  # ipBlock for a Prometheus outside the cluster) and ports.
+  prometheus:
+    peers:
+      - namespaceSelector:
+          matchLabels:
+            kubernetes.io/metadata.name: monitoring
+    ports: [9090, 9093]
+  dns:
+    peers:
+      - namespaceSelector:
+          matchLabels:
+            kubernetes.io/metadata.name: kube-system
+  metricsFrom:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: monitoring
+
+# A PrometheusRule for the operator's own health: syncs failing, Prometheus unreachable, query
+# budget running out. The operator grades these rules too.
+prometheusRule:
+  enabled: false
+  labels: {}
+
+# The "Alert quality" Grafana dashboard as a ConfigMap for the Grafana sidecar.
+grafanaDashboard:
+  enabled: false
+  labels:
+    grafana_dashboard: "1"
+  annotations: {}
+  namespace: ""

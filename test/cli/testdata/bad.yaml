@@ -1,0 +1,17 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: bad
+  namespace: team-a
+spec:
+  groups:
+    - name: bad
+      rules:
+        - alert: Broken
+          expr: rate(http_requests_total[5m] > 1
+        - alert: Nobody
+          expr: up == 0
+---
+apiVersion: v1
+kind: ConfigMap
+metadata: { name: ignored }

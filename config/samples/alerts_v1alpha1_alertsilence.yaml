@@ -1,0 +1,12 @@
+apiVersion: alerts.hypersurgery.dev/v1alpha1
+kind: AlertSilence
+metadata:
+  name: payments-db-migration
+  namespace: team-payments
+spec:
+  scopeRef: main
+  matchers:
+    - { name: alertname, value: PaymentsHighLatency }
+  duration: 4h
+  owner: payments
+  reason: "Database migration CHG-1234, latency expected to rise for the window"

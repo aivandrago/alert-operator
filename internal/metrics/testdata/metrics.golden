@@ -1,0 +1,24 @@
+# HELP hs_alert_rule_activations Activations of the rule's alert in the effective window.
+# TYPE hs_alert_rule_activations gauge
+hs_alert_rule_activations{alertname="PaymentsDown",namespace="team-payments",scope="main",team="payments"} 0
+hs_alert_rule_activations{alertname="PaymentsHighLatency",namespace="team-payments",scope="main",team="payments"} 212
+# HELP hs_alert_rule_findings Active findings: 1 per rule and finding (more only when rules share namespace, team and alert name).
+# TYPE hs_alert_rule_findings gauge
+hs_alert_rule_findings{alertname="PaymentsHighLatency",finding="NoRunbook",namespace="team-payments",scope="main",severity="info",team="payments"} 1
+hs_alert_rule_findings{alertname="PaymentsHighLatency",finding="Noisy",namespace="team-payments",scope="main",severity="warning",team="payments"} 1
+hs_alert_rule_findings{alertname="WebDown",finding="NotLoaded",namespace="team-web",scope="main",severity="critical",team="<none>"} 1
+hs_alert_rule_findings{alertname="WebDown",finding="Unowned",namespace="team-web",scope="main",severity="warning",team="<none>"} 1
+# HELP hs_alert_rule_firing_fraction Share of the effective window the rule's alert was firing.
+# TYPE hs_alert_rule_firing_fraction gauge
+hs_alert_rule_firing_fraction{alertname="PaymentsDown",namespace="team-payments",scope="main",team="payments"} 0
+hs_alert_rule_firing_fraction{alertname="PaymentsHighLatency",namespace="team-payments",scope="main",team="payments"} 0.06
+# HELP hs_alert_rules Alerting rules in the scope, by team, namespace and whether Prometheus loaded them.
+# TYPE hs_alert_rules gauge
+hs_alert_rules{loaded="false",namespace="team-web",scope="main",team="<none>"} 1
+hs_alert_rules{loaded="true",namespace="team-payments",scope="main",team="payments"} 2
+# HELP hs_alert_scope_effective_window_seconds History window the verdicts are based on: the configured window capped to the retention.
+# TYPE hs_alert_scope_effective_window_seconds gauge
+hs_alert_scope_effective_window_seconds{scope="main"} 1.296e+06
+# HELP hs_alert_scope_last_sync_timestamp_seconds Time of the scope's last complete sync.
+# TYPE hs_alert_scope_last_sync_timestamp_seconds gauge
+hs_alert_scope_last_sync_timestamp_seconds{scope="main"} 1.76346e+09
